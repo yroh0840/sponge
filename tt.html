@@ -2,27 +2,35 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>加速度センサーテスト</title>
+  <title>スクワットカウンター</title>
   <style>
-    body { font-family: sans-serif; text-align: center; padding-top: 50px; }
-    .value { font-size: 2em; margin: 10px; }
+    body { font-family: sans-serif; text-align: center; margin-top: 50px; }
+    .count { font-size: 3em; color: green; }
   </style>
 </head>
 <body>
-  <h1>スマホ加速度センサーテスト</h1>
-  <p>X軸: <span class="value" id="xVal">0</span></p>
-  <p>Y軸: <span class="value" id="yVal">0</span></p>
-  <p>Z軸: <span class="value" id="zVal">0</span></p>
+  <h1>スクワットカウンター</h1>
+  <p>Y軸加速度が -10 以下になるとカウント +1</p>
+  <div class="count" id="count">0</div>
+
   <script>
+    let count = 0;
+    let lastTime = 0;
+    const cooldown = 1000; // 1秒間はカウントしない（誤検出防止）
+
     if (window.DeviceMotionEvent) {
-      window.addEventListener('devicemotion', (event) => {
-        const acc = event.accelerationIncludingGravity || {};
-        document.getElementById('xVal').innerText = acc.x?.toFixed(2) || '0';
-        document.getElementById('yVal').innerText = acc.y?.toFixed(2) || '0';
-        document.getElementById('zVal').innerText = acc.z?.toFixed(2) || '0';
+      window.addEventListener('devicemotion', function(event) {
+        const y = event.accelerationIncludingGravity.y || 0;
+        const now = Date.now();
+
+        if (y < -10 && (now - lastTime > cooldown)) {
+          count++;
+          document.getElementById('count').innerText = count;
+          lastTime = now;
+        }
       });
     } else {
-      document.body.innerHTML += '<p>加速度センサー非対応です</p>';
+      alert("このデバイスでは加速度センサーが使えません。");
     }
   </script>
 </body>
