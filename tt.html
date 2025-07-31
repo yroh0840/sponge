@@ -23,8 +23,8 @@
     let previousMag = 0;
     let count = 0;
     let direction = 'none';
-    const THRESHOLD = 0.8; // 感度調整
-    let lastCountTime = 0;
+    const THRESHOLD = 1.0; // 感度強化
+    let directionLockTime = 0;
 
     function drawGraph() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -54,19 +54,19 @@
 
         const mag = Math.sqrt(x * x + y * y + z * z);
         const delta = mag - previousMag;
-        addToBuffer(mag - 9.8); // 重力を差し引いた変化を描画
+        addToBuffer(mag - 9.8);
 
-        // カウントロジック（Version 3: down→up検出 & インターバル）
+        const now = Date.now();
+
         if (delta < -THRESHOLD && direction === 'none') {
           direction = 'down';
+          directionLockTime = now;
         }
 
         if (delta > THRESHOLD && direction === 'down') {
-          const now = Date.now();
-          if (now - lastCountTime > 1000) { // 最低1秒空ける
+          if (now - directionLockTime > 300) {  // 300ms ロック時間
             direction = 'none';
             count++;
-            lastCountTime = now;
             document.getElementById("count").textContent = `スクワット回数: ${count}`;
           }
         }
