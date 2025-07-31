@@ -17,20 +17,21 @@
   <script>
     const canvas = document.getElementById("graph");
     const ctx = canvas.getContext("2d");
-    const buffer = []; // 波形用バッファ
+    const buffer = [];
     const MAX_POINTS = 600;
 
     let previousMag = 0;
     let count = 0;
     let direction = 'none';
-    const THRESHOLD = 0.4;
+    const THRESHOLD = 0.8; // 感度調整
+    let lastCountTime = 0;
 
     function drawGraph() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.beginPath();
       ctx.moveTo(0, 150);
       for (let i = 0; i < buffer.length; i++) {
-        const y = 150 - buffer[i] * 30; // スケール調整
+        const y = 150 - buffer[i] * 30;
         ctx.lineTo(i, y);
       }
       ctx.strokeStyle = "#007acc";
@@ -53,16 +54,21 @@
 
         const mag = Math.sqrt(x * x + y * y + z * z);
         const delta = mag - previousMag;
-        addToBuffer(mag - 9.8); // 重力分を引いた形で表示
+        addToBuffer(mag - 9.8); // 重力を差し引いた変化を描画
 
-        // スクワットカウントロジック
-        if (delta < -THRESHOLD && direction !== 'down') {
+        // カウントロジック（Version 3: down→up検出 & インターバル）
+        if (delta < -THRESHOLD && direction === 'none') {
           direction = 'down';
         }
+
         if (delta > THRESHOLD && direction === 'down') {
-          direction = 'none';
-          count++;
-          document.getElementById("count").textContent = `スクワット回数: ${count}`;
+          const now = Date.now();
+          if (now - lastCountTime > 1000) { // 最低1秒空ける
+            direction = 'none';
+            count++;
+            lastCountTime = now;
+            document.getElementById("count").textContent = `スクワット回数: ${count}`;
+          }
         }
 
         previousMag = mag;
