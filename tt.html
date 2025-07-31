@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>スクワットカウンター</title>
+  <title>スクワットカウンター（音声読み上げ付き）</title>
   <style>
     body { font-family: sans-serif; text-align: center; margin-top: 40px; }
     canvas { border: 1px solid #ccc; }
@@ -14,14 +14,20 @@
   <script>
     let count = 0;
     let lastCountTime = 0;
-    const THRESHOLD = 2.5; // 合成加速度のしきい値
-    const ANGLE_THRESHOLD = 3; // y軸（傾き）の変化量しきい値
+    const THRESHOLD = 2.5;
+    const ANGLE_THRESHOLD = 3;
     let direction = 'none';
     let directionLockTime = 0;
     let prevY = 0;
     const graph = document.getElementById("graph");
     const ctx = graph.getContext("2d");
     let accelHistory = [];
+
+    function speak(text) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "ja-JP"; // 日本語で読み上げ
+      window.speechSynthesis.speak(utterance);
+    }
 
     if (window.DeviceMotionEvent) {
       window.addEventListener("devicemotion", function(event) {
@@ -33,7 +39,7 @@
         accelHistory.push(magnitude);
         if (accelHistory.length > 100) accelHistory.shift();
 
-        const delta = magnitude - 9.8; // 重力分を引く
+        const delta = magnitude - 9.8;
         const angleDelta = Math.abs(y - prevY);
         prevY = y;
 
@@ -48,6 +54,7 @@
           if (angleDelta > ANGLE_THRESHOLD && now - directionLockTime > 400) {
             count++;
             document.getElementById("count").textContent = count;
+            speak(count.toString());
             direction = 'none';
             lastCountTime = now;
           }
