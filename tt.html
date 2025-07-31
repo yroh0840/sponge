@@ -36,7 +36,7 @@
         document.getElementById('zVal').innerText = z.toFixed(2);
 
         const now = Date.now();
-        if (y < -10 && (now - lastTime > cooldown)) {
+        if (z < -10 && (now - lastTime > cooldown)) {
           count++;
           document.getElementById('count').innerText = count;
           lastTime = now;
