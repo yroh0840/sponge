@@ -1,60 +1,41 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>スクワット波形リアルタイム表示</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <title>スクワットカウンター</title>
   <style>
-    body { font-family: sans-serif; text-align: center; }
-    canvas { border: 1px solid #ccc; width: 100%; max-width: 600px; height: 300px; }
-    #count { font-size: 2em; margin: 10px; }
+    body { font-family: sans-serif; text-align: center; margin-top: 40px; }
+    canvas { border: 1px solid #ccc; }
   </style>
 </head>
 <body>
-  <h1>スクワット波形リアルタイム表示</h1>
-  <p id="count">スクワット回数: 0</p>
-  <canvas id="graph" width="600" height="300"></canvas>
-
+  <h1>スクワット回数: <span id="count">0</span></h1>
+  <canvas id="graph" width="500" height="200"></canvas>
   <script>
-    const canvas = document.getElementById("graph");
-    const ctx = canvas.getContext("2d");
-    const buffer = [];
-    const MAX_POINTS = 600;
-
-    let previousMag = 0;
     let count = 0;
+    let lastCountTime = 0;
+    const THRESHOLD = 2.5; // 合成加速度のしきい値
+    const ANGLE_THRESHOLD = 3; // y軸（傾き）の変化量しきい値
     let direction = 'none';
-    const THRESHOLD = 2.5; // 感度強化
     let directionLockTime = 0;
-
-    function drawGraph() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.beginPath();
-      ctx.moveTo(0, 150);
-      for (let i = 0; i < buffer.length; i++) {
-        const y = 150 - buffer[i] * 30;
-        ctx.lineTo(i, y);
-      }
-      ctx.strokeStyle = "#007acc";
-      ctx.stroke();
-    }
-
-    function addToBuffer(value) {
-      buffer.push(value);
-      if (buffer.length > MAX_POINTS) {
-        buffer.shift();
-      }
-      drawGraph();
-    }
+    let prevY = 0;
+    const graph = document.getElementById("graph");
+    const ctx = graph.getContext("2d");
+    let accelHistory = [];
 
     if (window.DeviceMotionEvent) {
-      window.addEventListener("devicemotion", (event) => {
-        const x = event.accelerationIncludingGravity.x || 0;
-        const y = event.accelerationIncludingGravity.y || 0;
-        const z = event.accelerationIncludingGravity.z || 0;
+      window.addEventListener("devicemotion", function(event) {
+        const x = event.accelerationIncludingGravity.x;
+        const y = event.accelerationIncludingGravity.y;
+        const z = event.accelerationIncludingGravity.z;
 
-        const mag = Math.sqrt(x * x + y * y + z * z);
-        const delta = mag - previousMag;
-        addToBuffer(mag - 9.8);
+        const magnitude = Math.sqrt(x * x + y * y + z * z);
+        accelHistory.push(magnitude);
+        if (accelHistory.length > 100) accelHistory.shift();
+
+        const delta = magnitude - 9.8; // 重力分を引く
+        const angleDelta = Math.abs(y - prevY);
+        prevY = y;
 
         const now = Date.now();
 
@@ -64,17 +45,25 @@
         }
 
         if (delta > THRESHOLD && direction === 'down') {
-          if (now - directionLockTime > 300) {  // 300ms ロック時間
-            direction = 'none';
+          if (angleDelta > ANGLE_THRESHOLD && now - directionLockTime > 400) {
             count++;
-            document.getElementById("count").textContent = `スクワット回数: ${count}`;
+            document.getElementById("count").textContent = count;
+            direction = 'none';
+            lastCountTime = now;
           }
         }
 
-        previousMag = mag;
-      });
+        // グラフ描画
+        ctx.clearRect(0, 0, graph.width, graph.height);
+        ctx.beginPath();
+        accelHistory.forEach((val, i) => {
+          const yPos = 200 - val * 10;
+          ctx.lineTo(i * 5, yPos);
+        });
+        ctx.stroke();
+      }, true);
     } else {
-      alert("DeviceMotionセンサーが使えません");
+      alert("このデバイスは加速度センサーに対応していません。");
     }
   </script>
 </body>
