@@ -1,49 +1,74 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>加速度スクワットカウンター</title>
+  <title>スクワット波形リアルタイム表示</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { font-family: sans-serif; text-align: center; margin-top: 40px; }
-    .count { font-size: 3em; color: green; margin-bottom: 20px; }
-    .value { font-size: 3em; margin: 5px; }
+    body { font-family: sans-serif; text-align: center; }
+    canvas { border: 1px solid #ccc; width: 100%; max-width: 600px; height: 300px; }
+    #count { font-size: 2em; margin: 10px; }
   </style>
 </head>
 <body>
-  <h1>スクワットカウンター</h1>
-  <p>Y軸が -10 以下になるとカウント +1</p>
-  <div class="count" id="count">0</div>
-
-  <div class="value">X軸: <span id="xVal">0</span></div>
-  <div class="value">Y軸: <span id="yVal">0</span></div>
-  <div class="value">Z軸: <span id="zVal">0</span></div>
+  <h1>スクワット波形リアルタイム表示</h1>
+  <p id="count">スクワット回数: 0</p>
+  <canvas id="graph" width="600" height="300"></canvas>
 
   <script>
+    const canvas = document.getElementById("graph");
+    const ctx = canvas.getContext("2d");
+    const buffer = []; // 波形用バッファ
+    const MAX_POINTS = 600;
+
+    let previousMag = 0;
     let count = 0;
-    let lastTime = 0;
-    const cooldown = 1000; // 最低1秒あける
+    let direction = 'none';
+    const THRESHOLD = 0.4;
+
+    function drawGraph() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.beginPath();
+      ctx.moveTo(0, 150);
+      for (let i = 0; i < buffer.length; i++) {
+        const y = 150 - buffer[i] * 30; // スケール調整
+        ctx.lineTo(i, y);
+      }
+      ctx.strokeStyle = "#007acc";
+      ctx.stroke();
+    }
+
+    function addToBuffer(value) {
+      buffer.push(value);
+      if (buffer.length > MAX_POINTS) {
+        buffer.shift();
+      }
+      drawGraph();
+    }
 
     if (window.DeviceMotionEvent) {
-      window.addEventListener('devicemotion', function(event) {
-        const acc = event.accelerationIncludingGravity;
-        const x = acc.x || 0;
-        const y = acc.y || 0;
-        const z = acc.z || 0;
+      window.addEventListener("devicemotion", (event) => {
+        const x = event.accelerationIncludingGravity.x || 0;
+        const y = event.accelerationIncludingGravity.y || 0;
+        const z = event.accelerationIncludingGravity.z || 0;
 
-        // 値を画面に表示
-        document.getElementById('xVal').innerText = x.toFixed(2);
-        document.getElementById('yVal').innerText = y.toFixed(2);
-        document.getElementById('zVal').innerText = z.toFixed(2);
+        const mag = Math.sqrt(x * x + y * y + z * z);
+        const delta = mag - previousMag;
+        addToBuffer(mag - 9.8); // 重力分を引いた形で表示
 
-        const now = Date.now();
-        if (z < -10 && (now - lastTime > cooldown)) {
-          count++;
-          document.getElementById('count').innerText = count;
-          lastTime = now;
+        // スクワットカウントロジック
+        if (delta < -THRESHOLD && direction !== 'down') {
+          direction = 'down';
         }
+        if (delta > THRESHOLD && direction === 'down') {
+          direction = 'none';
+          count++;
+          document.getElementById("count").textContent = `スクワット回数: ${count}`;
+        }
+
+        previousMag = mag;
       });
     } else {
-      alert("このデバイスでは加速度センサーが使えません。");
+      alert("DeviceMotionセンサーが使えません");
     }
   </script>
 </body>
