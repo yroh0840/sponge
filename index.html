@@ -1,68 +1,70 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <title>スクワットカウンター</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Portfolio</title>
-  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    #count { font-size: 48px; }
+    #log { margin-top: 20px; font-size: 14px; white-space: pre-line; max-height: 300px; overflow-y: scroll; border-top: 1px solid #ccc; padding-top: 10px; }
+  </style>
 </head>
 <body>
-  <header>
-      <h1>Sponge<br><span>portfolio collection</span></h1>
-  </header>
-  <main>
-    <nav>
-      <ul>
-        <li><a href="#"><img src="images/icon_home.png">Home</a></li>
-        <li><a href="#profile"><img src="images/icon_prof1.png">Profile</a></li>
-        <li><a href="#portfolios"><img src="images/icon_portfolio1.png">Portfolios</a></li>
-        <li><a href="#contact"><img src="images/icon_mail2.png">Contact</a></li>
-      </ul>
-    </nav>
-    <section class="profile" id="profile">
-      <h1><img src="images/icon_prof2.png">Profile</h1>
-      <div class="prof_inner">
-        <img src="images/prof.jpeg" alt="my_img">
-        <div class="prof_inner_text">
-          <p>spongeと申します</p>
-          <p>和歌山県在住</p>
-          <p>ポートフォリオをどんどんあげていきます</p>
-          <p>主にwebアプリ・ios・wordpressで作っていきます</p>
-          <p>現在使える言語はHTML・CSS・JAVASCRIPT・PYTHON・C#・VBA・VB.NET</p>
-        </div>
-      </div>   
-    </section>
-    <section class="portfolio" id="portfolios">
-      <h1><img src="images/icon_portfolio2.png">Portfolios</h1>
-      <div class="portfolio_innter">
-        <div class="portfolio_list">
-          <h3>アプリ名1</h3>
-          <a href="./tt.html"><img src="#" alt="アプリ"></a>
-          <p>素晴らしいアプリです</p>
-        </div>
-      </div>
-    </section>
-    <section class="contact" id="contact">
-      <h1><img src="images/icon_mail1.png">Contact</h1>
-      <div class="form"></div>
-      <div class="sns">
-        <p>↓お問い合わせはこちらからお願い致します↓</p>
-        <a href="mailto:sponge0840@gmail.com"><img src="images/icon_mail1.png"></a>
-        <a href="https://twitter.com/axPlJUKLtquAX6f" target="_blank" rel="noopener noreferrer"><img src="images/Twitter_Icon.png" alt="Twitter"></a>
-      </div>
-    </section>
-  </main>
-  <footer>
-    <nav>
-      <ul>
-        <li><a href="#"><img src="images/icon_home.png">Home</a></li>
-        <li><a href="#profile"><img src="images/icon_prof1.png">Profile</a></li>
-        <li><a href="#portfolios"><img src="images/icon_portfolio1.png">Portfolios</a></li>
-        <li><a href="#contact"><img src="images/icon_mail2.png">Contact</a></li>
-      </ul>
-    </nav>
-    <small>2020 © YASUKE </small>
-  </footer>
-  <script src="js/main.js"></script>
+  <h1>スクワット回数: <span id="count">0</span></h1>
+  <div id="log"></div>
+
+  <script>
+    let count = 0;
+    let lastCountTime = 0;
+    const THRESHOLD = 2.5;
+    const MIN_INTERVAL = 800; // ms
+
+    const countElem = document.getElementById('count');
+    const logElem = document.getElementById('log');
+    const synth = window.speechSynthesis;
+
+    function speak(text) {
+      if (!synth.speaking) {
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = 'ja-JP';
+        synth.speak(utter);
+      }
+    }
+
+    function saveLogEntry() {
+      const now = new Date();
+      const entry = `${now.toLocaleString()} に 1回スクワット`;
+      const logs = JSON.parse(localStorage.getItem('squatLogs') || '[]');
+      logs.push(entry);
+      localStorage.setItem('squatLogs', JSON.stringify(logs));
+      renderLogs();
+    }
+
+    function renderLogs() {
+      const logs = JSON.parse(localStorage.getItem('squatLogs') || '[]');
+      logElem.textContent = logs.slice().reverse().join('\n');
+    }
+
+    function handleSquatDetected() {
+      const now = Date.now();
+      if (now - lastCountTime > MIN_INTERVAL) {
+        count++;
+        countElem.textContent = count;
+        speak(count.toString());
+        saveLogEntry();
+        lastCountTime = now;
+      }
+    }
+
+    window.addEventListener('devicemotion', (event) => {
+      const y = event.accelerationIncludingGravity.y;
+      if (y < -THRESHOLD) {
+        handleSquatDetected();
+      }
+    });
+
+    renderLogs();
+  </script>
 </body>
 </html>
