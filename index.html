@@ -7,7 +7,15 @@
   <style>
     body { font-family: sans-serif; padding: 20px; }
     #count { font-size: 48px; }
-    #log { margin-top: 20px; font-size: 14px; white-space: pre-line; max-height: 300px; overflow-y: scroll; border-top: 1px solid #ccc; padding-top: 10px; }
+    #log {
+      margin-top: 20px;
+      font-size: 14px;
+      white-space: pre-line;
+      max-height: 300px;
+      overflow-y: scroll;
+      border-top: 1px solid #ccc;
+      padding-top: 10px;
+    }
   </style>
 </head>
 <body>
@@ -17,19 +25,23 @@
   <script>
     let count = 0;
     let lastCountTime = 0;
+    let lastSpokenTime = 0;
     const THRESHOLD = 2.5;
     const MIN_INTERVAL = 800; // ms
+    const SPEAK_INTERVAL = 1000; // ms
 
     const countElem = document.getElementById('count');
     const logElem = document.getElementById('log');
     const synth = window.speechSynthesis;
 
     function speak(text) {
-      if (!synth.speaking) {
-        const utter = new SpeechSynthesisUtterance(text);
-        utter.lang = 'ja-JP';
-        synth.speak(utter);
-      }
+      const now = Date.now();
+      if (now - lastSpokenTime < SPEAK_INTERVAL || synth.speaking) return;
+
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'ja-JP';
+      synth.speak(utter);
+      lastSpokenTime = now;
     }
 
     function saveLogEntry() {
@@ -57,6 +69,7 @@
       }
     }
 
+    // 加速度センサーから y軸を取得してスクワット判定
     window.addEventListener('devicemotion', (event) => {
       const y = event.accelerationIncludingGravity.y;
       if (y < -THRESHOLD) {
@@ -64,7 +77,9 @@
       }
     });
 
-    renderLogs();
+    window.onload = () => {
+      renderLogs();
+    };
   </script>
 </body>
 </html>
