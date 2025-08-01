@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>スクワットカウンター</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body { font-family: sans-serif; padding: 20px; }
     #count { font-size: 48px; }
@@ -25,23 +25,27 @@
   <script>
     let count = 0;
     let lastCountTime = 0;
-    let lastSpokenTime = 0;
     const THRESHOLD = 2.5;
     const MIN_INTERVAL = 800; // ms
-    const SPEAK_INTERVAL = 1000; // ms
 
     const countElem = document.getElementById('count');
     const logElem = document.getElementById('log');
-    const synth = window.speechSynthesis;
 
-    function speak(text) {
-      const now = Date.now();
-      if (now - lastSpokenTime < SPEAK_INTERVAL || synth.speaking) return;
+    // 合成済み音声ファイルを再生
+    function playCountSound(count) {
+      const maxPreloaded = 100;
+      let audioFile = '';
 
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = 'ja-JP';
-      synth.speak(utter);
-      lastSpokenTime = now;
+      if (count <= maxPreloaded) {
+        audioFile = `${count}.mp3`;
+      } else {
+        audioFile = 'ding.mp3'; // 100超えたら効果音
+      }
+
+      const audio = new Audio(audioFile);
+      audio.play().catch((e) => {
+        console.warn('Audio playback failed:', e);
+      });
     }
 
     function saveLogEntry() {
@@ -63,13 +67,12 @@
       if (now - lastCountTime > MIN_INTERVAL) {
         count++;
         countElem.textContent = count;
-        speak(count.toString());
+        playCountSound(count);
         saveLogEntry();
         lastCountTime = now;
       }
     }
 
-    // 加速度センサーから y軸を取得してスクワット判定
     window.addEventListener('devicemotion', (event) => {
       const y = event.accelerationIncludingGravity.y;
       if (y < -THRESHOLD) {
