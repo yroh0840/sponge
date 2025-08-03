@@ -1,163 +1,139 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<title>スクワットリズムゲーム</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<style>
-  body {
-    font-family: sans-serif;
-    text-align: center;
-    padding: 20px;
-  }
-  #beat-circle {
-    margin: 40px auto;
-    width: 150px;
-    height: 150px;
-    border-radius: 50%;
-    background: #ccc;
-    transition: background-color 0.1s ease;
-  }
-  #count {
-    font-size: 48px;
-    margin-top: 20px;
-  }
-  #status {
-    margin-top: 10px;
-    font-size: 18px;
-    color: #666;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <title>スクワットカウンター（進化ボール付き）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: sans-serif; padding: 20px; text-align: center; }
+    #count { font-size: 48px; margin-bottom: 20px; }
+    #ball {
+      margin: 0 auto;
+      background-color: #ff6347;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      transition: width 0.3s ease, height 0.3s ease;
+      margin-bottom: 20px;
+    }
+    #log {
+      font-size: 14px;
+      white-space: pre-line;
+      max-height: 200px;
+      overflow-y: scroll;
+      border-top: 1px solid #ccc;
+      padding-top: 10px;
+      text-align: left;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+  </style>
 </head>
 <body>
+  <h1>スクワット回数: <span id="count">0</span></h1>
+  <div id="ball"></div>
+  <div id="log"></div>
 
-<h1>スクワットリズムゲーム</h1>
-<label>
-  BPM:
-  <input type="number" id="bpmInput" value="60" min="30" max="200" />
-</label>
-<button id="startBtn">スタート</button>
-<button id="stopBtn" disabled>ストップ</button>
+  <script>
+    // カウントとボールサイズの管理
+    let count = 0;
+    let lastCountTime = 0;
+    const THRESHOLD = 2.5;
+    const MIN_INTERVAL = 800; // ms
+    const maxPreloaded = 100;
 
-<div id="beat-circle"></div>
-<div id="count">カウント: 0</div>
-<div id="status">準備OK</div>
+    // BPM設定（1分あたりのビート数）
+    const bpm = 60;
+    const beatInterval = 60000 / bpm; // ミリ秒単位
 
-<script>
-  let bpm = 60;
-  let interval = 60000 / bpm; // ms per beat
-  let beatTimer = null;
-  let count = 0;
-  let lastBeatTime = 0;
-  let squatDetected = false;
-  const beatCircle = document.getElementById('beat-circle');
-  const countElem = document.getElementById('count');
-  const statusElem = document.getElementById('status');
-  const bpmInput = document.getElementById('bpmInput');
-  const startBtn = document.getElementById('startBtn');
-  const stopBtn = document.getElementById('stopBtn');
+    // 次のビート時刻を管理
+    let nextBeatTime = Date.now() + beatInterval;
 
-  // 音声ファイルを0~100まで用意してる想定。ない場合は代替音
-  function playCountSound(count) {
-    let audioFile = '';
-    if (count <= 100) {
-      audioFile = `${count}.mp3`; // 例: "1.mp3", "2.mp3"...
-    } else {
-      audioFile = 'ding.mp3';
-    }
-    const audio = new Audio(audioFile);
-    audio.play().catch(e => console.warn('Audio再生失敗', e));
-  }
+    // HTML要素の取得
+    const countElem = document.getElementById('count');
+    const logElem = document.getElementById('log');
+    const ballElem = document.getElementById('ball');
 
-  // ビートの点滅＆音
-  function beat() {
-    lastBeatTime = Date.now();
-    // 光らせる（色を変える）
-    beatCircle.style.backgroundColor = '#4caf50';
-    setTimeout(() => {
-      beatCircle.style.backgroundColor = '#ccc';
-    }, 150);
-    // ビート音を鳴らす（ここはシンプルにクリック音的な短い音）
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const o = audioCtx.createOscillator();
-    const g = audioCtx.createGain();
-    o.type = 'square';
-    o.frequency.value = 440;
-    o.connect(g);
-    g.connect(audioCtx.destination);
-    o.start();
-    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.1);
-    o.stop(audioCtx.currentTime + 0.1);
-  }
-
-  // スクワット検出設定
-  const THRESHOLD = -2.5; // y軸加速度の閾値（調整可）
-  const TIMING_ALLOWANCE = interval * 0.3; // ビート前後の許容時間（30%）
-
-  function handleSquatDetected() {
-    const now = Date.now();
-    // ビートのタイミング内か？
-    if (Math.abs(now - lastBeatTime) <= TIMING_ALLOWANCE) {
-      if (!squatDetected) { // 連続カウント防止
-        count++;
-        countElem.textContent = `カウント: ${count}`;
-        playCountSound(count);
-        statusElem.textContent = '成功！リズムに合わせてスクワット！';
-        squatDetected = true;
-        setTimeout(() => {
-          squatDetected = false;
-          statusElem.textContent = 'リズムを待ってください';
-        }, 500);
+    // 音声再生（カウント数に対応）
+    function playCountSound(count) {
+      let audioFile = '';
+      if (count <= maxPreloaded) {
+        audioFile = `${count}.mp3`;
+      } else {
+        audioFile = 'ding.mp3';
       }
-    } else {
-      statusElem.textContent = 'タイミングずれています';
-      setTimeout(() => {
-        statusElem.textContent = 'リズムを待ってください';
-      }, 500);
+      // 今回は音声ファイルがない前提なので、代わりにconsole.log
+      console.log('Play sound for count:', count);
     }
-  }
 
-  function startGame() {
-    bpm = Number(bpmInput.value);
-    if (bpm < 30 || bpm > 200) {
-      alert('BPMは30〜200の間で指定してください');
-      return;
+    // ログをlocalStorageに保存
+    function saveLogEntry() {
+      const now = new Date();
+      const entry = `${now.toLocaleString()} に 1回スクワット`;
+      const logs = JSON.parse(localStorage.getItem('squatLogs') || '[]');
+      logs.push(entry);
+      localStorage.setItem('squatLogs', JSON.stringify(logs));
+      renderLogs();
     }
-    interval = 60000 / bpm;
-    count = 0;
-    countElem.textContent = `カウント: 0`;
-    statusElem.textContent = 'リズムを待ってください';
 
-    // 最初のビートをすぐ鳴らす
-    beat();
-
-    // 以降BPMに合わせてビートを鳴らす
-    beatTimer = setInterval(beat, interval);
-
-    startBtn.disabled = true;
-    stopBtn.disabled = false;
-  }
-
-  function stopGame() {
-    clearInterval(beatTimer);
-    beatTimer = null;
-    beatCircle.style.backgroundColor = '#ccc';
-    statusElem.textContent = 'ゲーム停止中';
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-  }
-
-  // 加速度センサーイベント
-  window.addEventListener('devicemotion', (event) => {
-    const y = event.accelerationIncludingGravity.y;
-    if (y < THRESHOLD) {
-      handleSquatDetected();
+    // ログを画面に表示
+    function renderLogs() {
+      const logs = JSON.parse(localStorage.getItem('squatLogs') || '[]');
+      logElem.textContent = logs.slice().reverse().join('\n');
     }
-  });
 
-  startBtn.addEventListener('click', startGame);
-  stopBtn.addEventListener('click', stopGame);
-</script>
+    // ボールのサイズをカウントに応じて変化させる（進化演出）
+    function updateBallSize(count) {
+      // 最小50pxから最大200pxまで線形に拡大
+      const minSize = 50;
+      const maxSize = 200;
+      // 100カウントで最大サイズに
+      const size = Math.min(minSize + (maxSize - minSize) * (count / 100), maxSize);
+      ballElem.style.width = size + 'px';
+      ballElem.style.height = size + 'px';
+    }
 
+    // スクワットが判定された時の処理
+    function handleSquatDetected() {
+      const now = Date.now();
+      if (now - lastCountTime > MIN_INTERVAL) {
+        count++;
+        countElem.textContent = count;
+        playCountSound(count);
+        saveLogEntry();
+        updateBallSize(count);
+        lastCountTime = now;
+      }
+    }
+
+    // 加速度センサーイベントでスクワット判定
+    window.addEventListener('devicemotion', (event) => {
+      const y = event.accelerationIncludingGravity.y;
+      if (y < -THRESHOLD) {
+        handleSquatDetected();
+      }
+    });
+
+    // BPMのリズムで画面を光らせる（ビートに合わせてボールの背景色を変える）
+    function rhythmPulse() {
+      const now = Date.now();
+      if (now >= nextBeatTime) {
+        // ビート時に一瞬明るくする
+        ballElem.style.backgroundColor = '#ffa07a'; // 明るい色
+        setTimeout(() => {
+          ballElem.style.backgroundColor = '#ff6347'; // 元の色に戻す
+        }, 150);
+
+        nextBeatTime += beatInterval;
+      }
+      requestAnimationFrame(rhythmPulse);
+    }
+
+    window.onload = () => {
+      renderLogs();
+      updateBallSize(count);
+      rhythmPulse();
+    };
+  </script>
 </body>
 </html>
