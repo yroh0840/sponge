@@ -7,11 +7,11 @@
   <style>
     body { font-family: sans-serif; padding: 20px; }
     #count { font-size: 48px; }
-    #log {
+    #log, #stats {
       margin-top: 20px;
       font-size: 14px;
       white-space: pre-line;
-      max-height: 300px;
+      max-height: 200px;
       overflow-y: scroll;
       border-top: 1px solid #ccc;
       padding-top: 10px;
@@ -20,26 +20,27 @@
 </head>
 <body>
   <h1>スクワット回数: <span id="count">0</span></h1>
+  <div id="stats"></div>
   <div id="log"></div>
 
   <script>
     let count = 0;
     let lastCountTime = 0;
     const THRESHOLD = 2.5;
-    const MIN_INTERVAL = 800; // ms
+    const MIN_INTERVAL = 800;
 
     const countElem = document.getElementById('count');
     const logElem = document.getElementById('log');
+    const statsElem = document.getElementById('stats');
 
-    // 合成済み音声ファイルを再生
     function playCountSound(count) {
       const maxPreloaded = 100;
       let audioFile = '';
 
       if (count <= maxPreloaded) {
-        audioFile = `${count}.mp3`;
+        audioFile = `count_audio/${count}.mp3`;
       } else {
-        audioFile = 'ding.mp3'; // 100超えたら効果音
+        audioFile = 'ding.mp3';
       }
 
       const audio = new Audio(audioFile);
@@ -57,9 +58,26 @@
       renderLogs();
     }
 
+    function saveDailyCount() {
+      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      const dailyCounts = JSON.parse(localStorage.getItem('dailySquatCounts') || '{}');
+      dailyCounts[today] = (dailyCounts[today] || 0) + 1;
+      localStorage.setItem('dailySquatCounts', JSON.stringify(dailyCounts));
+      renderDailyStats();
+    }
+
     function renderLogs() {
       const logs = JSON.parse(localStorage.getItem('squatLogs') || '[]');
       logElem.textContent = logs.slice().reverse().join('\n');
+    }
+
+    function renderDailyStats() {
+      const dailyCounts = JSON.parse(localStorage.getItem('dailySquatCounts') || '{}');
+      const entries = Object.entries(dailyCounts)
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([date, total]) => `${date}: ${total} 回`)
+        .join('\n');
+      statsElem.textContent = `📅 日別スクワット記録：\n${entries}`;
     }
 
     function handleSquatDetected() {
@@ -69,6 +87,7 @@
         countElem.textContent = count;
         playCountSound(count);
         saveLogEntry();
+        saveDailyCount();
         lastCountTime = now;
       }
     }
@@ -82,6 +101,7 @@
 
     window.onload = () => {
       renderLogs();
+      renderDailyStats();
     };
   </script>
 </body>
