@@ -2,189 +2,192 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>スクワットリズムゲーム</title>
+  <title>スクワットカウンター（統合版）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 20px; }
+    body { font-family: sans-serif; padding: 20px; text-align: center; }
+    #count { font-size: 48px; margin-bottom: 20px; }
     #ball {
-      margin: 20px auto;
+      margin: 0 auto;
+      background-color: #ff6347;
+      border-radius: 50%;
       width: 50px;
       height: 50px;
-      background: #ff6347;
-      border-radius: 50%;
-      transition: width 0.3s, height 0.3s, background-color 0.1s;
+      transition: width 0.3s ease, height 0.3s ease, background-color 0.2s ease;
+      margin-bottom: 20px;
     }
-    #count { font-size: 32px; margin: 10px; }
-    #result { font-size: 24px; height: 30px; margin-top: 10px; color: #333; }
-    #timer { font-size: 24px; color: #444; margin-top: 10px; }
-    #controls, #settings { margin: 10px 0; }
-    select, button { padding: 5px 10px; font-size: 16px; }
+    #log {
+      font-size: 14px;
+      white-space: pre-line;
+      max-height: 200px;
+      overflow-y: scroll;
+      border-top: 1px solid #ccc;
+      padding-top: 10px;
+      text-align: left;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    #controls {
+      margin-bottom: 20px;
+    }
   </style>
 </head>
 <body>
-  <h1>スクワットカウンター🎵</h1>
+  <h1>スクワット回数: <span id="count">0</span></h1>
   <div id="ball"></div>
-  <div id="count">回数: 0</div>
-  <div id="result"></div>
-  <div id="timer">残り時間: -- 秒</div>
-
-  <div id="settings">
-    BPM:
-    <select id="bpmSelect">
-      <option value="60">60</option>
-      <option value="80" selected>80</option>
-      <option value="100">100</option>
-    </select>
-    &nbsp;&nbsp;タイムリミット（秒）:
-    <select id="timeLimit">
-      <option value="30">30</option>
-      <option value="60" selected>60</option>
-      <option value="90">90</option>
-    </select>
-  </div>
 
   <div id="controls">
-    <button id="startBtn">スタート</button>
-    <button id="stopBtn" disabled>停止</button>
+    <label>BPM: <input type="number" id="bpmInput" value="60" min="30" max="200" /></label><br><br>
+    <label>タイムリミット（秒）: <input type="number" id="timeLimitInput" value="60" min="5" /></label><br><br>
+    <button onclick="startSession()">スタート</button>
+    <button onclick="stopSession()">ストップ</button>
+    <h2 id="timeDisplay"></h2>
+    <h2 id="commentDisplay"></h2>
   </div>
+
+  <div id="log"></div>
 
   <script>
     let count = 0;
-    let running = false;
-    let lastSquatTime = 0;
-    let nextBeat = Date.now();
-    let beatInterval = 750;
-    let timerInterval = null;
-    let remaining = 60;
+    let lastCountTime = 0;
     const THRESHOLD = 2.5;
-    const MIN_INTERVAL = 500;
+    const MIN_INTERVAL = 800;
+    const maxPreloaded = 100;
 
-    const ball = document.getElementById('ball');
-    const countDisplay = document.getElementById('count');
-    const resultDisplay = document.getElementById('result');
-    const timerDisplay = document.getElementById('timer');
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const bpmSelect = document.getElementById('bpmSelect');
-    const timeLimitSelect = document.getElementById('timeLimit');
+    let bpm = 60;
+    let beatInterval = 1000;
+    let beatTimer = null;
+    let timeLimit = 60;
+    let timer = null;
+    let timeRemaining = 0;
+    let active = false;
 
-    // 音声読み上げ
+    const countElem = document.getElementById('count');
+    const logElem = document.getElementById('log');
+    const ballElem = document.getElementById('ball');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const commentDisplay = document.getElementById('commentDisplay');
+    const bpmInput = document.getElementById('bpmInput');
+    const timeLimitInput = document.getElementById('timeLimitInput');
+
     function speak(text) {
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = 'ja-JP';
-      speechSynthesis.speak(utter);
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "ja-JP";
+      utterance.rate = 1.0;
+      utterance.pitch = 1.1;
+      window.speechSynthesis.speak(utterance);
     }
 
-    // ボールサイズを進化
-    function updateBall() {
-      const size = 50 + Math.min(count, 100) * 1.5;
-      ball.style.width = size + 'px';
-      ball.style.height = size + 'px';
-    }
-
-    // スクワット処理
-    function handleSquat() {
-      const now = Date.now();
-      if (!running || now - lastSquatTime < MIN_INTERVAL) return;
-
-      const diff = Math.abs(now - nextBeat);
-      let feedback = 'Miss';
-
-      if (diff < 200) feedback = 'Great!';
-      else if (diff < 400) feedback = 'Hit!';
-
-      count++;
-      lastSquatTime = now;
-      countDisplay.textContent = `回数: ${count}`;
-      resultDisplay.textContent = feedback;
-      speak(feedback);
-      updateBall();
-    }
-
-    // ビート（ボールが光って音も鳴る）
-    function rhythmLoop() {
-      if (!running) return;
-      const now = Date.now();
-      if (now >= nextBeat) {
-        ball.style.backgroundColor = '#ffa07a';
-        setTimeout(() => {
-          ball.style.backgroundColor = '#ff6347';
-        }, 150);
-        playBeep();
-        nextBeat += beatInterval;
-      }
-      requestAnimationFrame(rhythmLoop);
-    }
-
-    // ピッというビープ音
     function playBeep() {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const oscillator = ctx.createOscillator();
-      const gain = ctx.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.value = 880; // ピーという高い音
-      oscillator.connect(gain);
-      gain.connect(ctx.destination);
-      oscillator.start();
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
-      oscillator.stop(ctx.currentTime + 0.1);
+      const beep = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+      beep.play();
     }
 
-    // タイマー
-    function startTimer(seconds) {
-      remaining = seconds;
-      timerDisplay.textContent = `残り時間: ${remaining} 秒`;
-      speak(`スタート！残り${remaining}秒`);
-
-      timerInterval = setInterval(() => {
-        remaining--;
-        timerDisplay.textContent = `残り時間: ${remaining} 秒`;
-
-        // 5秒刻み or 残り5秒からは毎秒読み上げ
-        if (remaining <= 5 || remaining % 5 === 0) {
-          speak(`残り ${remaining} 秒`);
-        }
-
-        if (remaining <= 0) stopGame();
-      }, 1000);
+    function playCountSound(count) {
+      if (count <= maxPreloaded) {
+        speak(count.toString());
+      } else {
+        speak("カウント");
+      }
     }
 
-    function startGame() {
+    function handleSquatDetected() {
+      const now = Date.now();
+      if (!active) return;
+      if (now - lastCountTime > MIN_INTERVAL) {
+        count++;
+        countElem.textContent = count;
+        updateBallSize(count);
+        playCountSound(count);
+        showComment("HIT!");
+        lastCountTime = now;
+        saveLogEntry();
+      }
+    }
+
+    function saveLogEntry() {
+      const now = new Date();
+      const entry = `${now.toLocaleString()} に 1回スクワット`;
+      const logs = JSON.parse(localStorage.getItem('squatLogs') || '[]');
+      logs.push(entry);
+      localStorage.setItem('squatLogs', JSON.stringify(logs));
+      renderLogs();
+    }
+
+    function renderLogs() {
+      const logs = JSON.parse(localStorage.getItem('squatLogs') || '[]');
+      logElem.textContent = logs.slice().reverse().join('\n');
+    }
+
+    function updateBallSize(count) {
+      const minSize = 50;
+      const maxSize = 200;
+      const size = Math.min(minSize + (maxSize - minSize) * (count / 100), maxSize);
+      ballElem.style.width = size + 'px';
+      ballElem.style.height = size + 'px';
+    }
+
+    function showComment(text) {
+      commentDisplay.textContent = text;
+      speak(text);
+      setTimeout(() => commentDisplay.textContent = '', 1000);
+    }
+
+    function startSession() {
       count = 0;
-      updateBall();
-      countDisplay.textContent = `回数: 0`;
-      resultDisplay.textContent = '';
-      running = true;
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
+      countElem.textContent = count;
+      active = true;
 
-      const bpm = parseInt(bpmSelect.value);
-      const timeLimit = parseInt(timeLimitSelect.value);
+      bpm = parseInt(bpmInput.value);
       beatInterval = 60000 / bpm;
-      nextBeat = Date.now() + beatInterval;
-      startTimer(timeLimit);
-      rhythmLoop();
+
+      timeLimit = parseInt(timeLimitInput.value);
+      timeRemaining = timeLimit;
+      updateTimeDisplay();
+
+      beatTimer = setInterval(() => {
+        ballElem.style.backgroundColor = '#ffa07a';
+        playBeep();
+        setTimeout(() => {
+          ballElem.style.backgroundColor = '#ff6347';
+        }, 150);
+      }, beatInterval);
+
+      timer = setInterval(() => {
+        timeRemaining--;
+        updateTimeDisplay();
+        if (timeRemaining <= 5) speak(`${timeRemaining}`);
+        if (timeRemaining <= 0) stopSession();
+      }, 1000);
+
+      speak("スタート！");
     }
 
-    function stopGame() {
-      running = false;
-      clearInterval(timerInterval);
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
-      timerDisplay.textContent = `終了！おつかれさま`;
-      speak('おつかれさまでした！');
+    function stopSession() {
+      active = false;
+      clearInterval(beatTimer);
+      clearInterval(timer);
+      speak("ストップ！");
     }
 
-    startBtn.addEventListener('click', startGame);
-    stopBtn.addEventListener('click', stopGame);
+    function updateTimeDisplay() {
+      timeDisplay.textContent = `残り時間: ${timeRemaining} 秒`;
+    }
 
-    window.addEventListener('devicemotion', (e) => {
-      const y = e.accelerationIncludingGravity.y;
+    // スクワット判定ロジック（y軸の加速度のみ）
+    window.addEventListener('devicemotion', (event) => {
+      if (!active) return;
+      const y = event.accelerationIncludingGravity.y;
       if (y < -THRESHOLD) {
-        handleSquat();
+        handleSquatDetected();
       }
     });
+
+    window.onload = () => {
+      renderLogs();
+      updateBallSize(0);
+    };
   </script>
 </body>
 </html>
