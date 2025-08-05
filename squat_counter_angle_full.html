@@ -1,0 +1,195 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>スクワットカウンター（角度＋演出付き）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: sans-serif; padding: 20px; text-align: center; }
+    #count { font-size: 48px; margin-bottom: 20px; }
+    #ball {
+      margin: 0 auto 20px auto;
+      background-color: #ff6347;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      transition: width 0.3s ease, height 0.3s ease, background-color 0.1s ease;
+    }
+    #log {
+      font-size: 14px;
+      white-space: pre-line;
+      max-height: 200px;
+      overflow-y: scroll;
+      border-top: 1px solid #ccc;
+      padding-top: 10px;
+      text-align: left;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    #controls {
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>スクワット回数: <span id="count">0</span></h1>
+  <div id="ball"></div>
+
+  <div id="controls">
+    <button id="startBtn">スタート</button>
+    <button id="stopBtn">ストップ</button><br><br>
+
+    <label>BPM:
+      <select id="bpmSelect">
+        <option value="60">60</option>
+        <option value="80">80</option>
+        <option value="100" selected>100</option>
+        <option value="120">120</option>
+      </select>
+    </label><br><br>
+
+    <label>タイムリミット（秒）:
+      <select id="timeLimitSelect">
+        <option value="30">30秒</option>
+        <option value="60" selected>60秒</option>
+        <option value="90">90秒</option>
+      </select>
+    </label>
+
+    <div id="timerDisplay"></div>
+  </div>
+
+  <div id="log"></div>
+
+  <script>
+    let count = 0;
+    let lastCountTime = 0;
+    let lastAngle = 0;
+    let direction = 'none';
+    let running = false;
+    let timerInterval = null;
+    let beatIntervalId = null;
+    let remainingTime = 60;
+
+    const THRESHOLD_ANGLE = 45;
+    const MIN_INTERVAL = 700;
+
+    const countElem = document.getElementById('count');
+    const ballElem = document.getElementById('ball');
+    const logElem = document.getElementById('log');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const bpmSelect = document.getElementById('bpmSelect');
+    const timeLimitSelect = document.getElementById('timeLimitSelect');
+    const timerDisplay = document.getElementById('timerDisplay');
+
+    function speak(text) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'ja-JP';
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function handleSquatDetected() {
+      const now = Date.now();
+      if (now - lastCountTime > MIN_INTERVAL) {
+        count++;
+        countElem.textContent = count;
+        updateBallSize();
+        giveFeedback();
+        speak(count.toString());
+        lastCountTime = now;
+      }
+    }
+
+    function updateBallSize() {
+      const minSize = 50;
+      const maxSize = 200;
+      const size = Math.min(minSize + (maxSize - minSize) * (count / 100), maxSize);
+      ballElem.style.width = size + 'px';
+      ballElem.style.height = size + 'px';
+    }
+
+    function giveFeedback() {
+      const now = Date.now();
+      const delta = now - lastCountTime;
+
+      if (delta < 900) {
+        speak("Great!");
+      } else if (delta < 1500) {
+        speak("Hit!");
+      } else {
+        speak("Miss!");
+      }
+    }
+
+    function startTimer() {
+      remainingTime = parseInt(timeLimitSelect.value);
+      timerDisplay.textContent = `残り: ${remainingTime}秒`;
+
+      timerInterval = setInterval(() => {
+        remainingTime--;
+        if (remainingTime <= 0) {
+          stopSession();
+          speak("終了！");
+        } else if (remainingTime <= 5 || remainingTime % 5 === 0) {
+          speak(`${remainingTime}秒`);
+        }
+        timerDisplay.textContent = `残り: ${remainingTime}秒`;
+      }, 1000);
+    }
+
+    function stopSession() {
+      running = false;
+      clearInterval(timerInterval);
+      clearInterval(beatIntervalId);
+    }
+
+    function startSession() {
+      count = 0;
+      countElem.textContent = count;
+      running = true;
+      lastCountTime = 0;
+      speak("スタート");
+      startTimer();
+      startBeat();
+    }
+
+    function startBeat() {
+      const bpm = parseInt(bpmSelect.value);
+      const interval = 60000 / bpm;
+
+      beatIntervalId = setInterval(() => {
+        ballElem.style.backgroundColor = '#ffa07a';
+        speak("ビート");
+        setTimeout(() => {
+          ballElem.style.backgroundColor = '#ff6347';
+        }, 150);
+      }, interval);
+    }
+
+    window.addEventListener('devicemotion', (event) => {
+      if (!running) return;
+
+      const y = event.accelerationIncludingGravity.y;
+      const z = event.accelerationIncludingGravity.z;
+      const angle = Math.atan2(y, z) * (180 / Math.PI);
+
+      if (angle < -THRESHOLD_ANGLE && direction === 'none') {
+        direction = 'down';
+      }
+
+      if (angle > THRESHOLD_ANGLE && direction === 'down') {
+        handleSquatDetected();
+        direction = 'none';
+      }
+    });
+
+    startBtn.addEventListener('click', startSession);
+    stopBtn.addEventListener('click', stopSession);
+  </script>
+</body>
+</html>
