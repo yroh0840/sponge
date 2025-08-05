@@ -2,21 +2,13 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>スクワットカウンター（統合版）</title>
+  <title>スクワットカウンター（角度判定）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body { font-family: sans-serif; padding: 20px; text-align: center; }
     #count { font-size: 48px; margin-bottom: 20px; }
-    #ball {
-      margin: 0 auto;
-      background-color: #ff6347;
-      border-radius: 50%;
-      width: 50px;
-      height: 50px;
-      transition: width 0.3s ease, height 0.3s ease, background-color 0.2s ease;
-      margin-bottom: 20px;
-    }
-    #log {
+    #log, #stats {
+      margin-top: 20px;
       font-size: 14px;
       white-space: pre-line;
       max-height: 200px;
@@ -27,83 +19,39 @@
       max-width: 400px;
       margin: 0 auto;
     }
-    #controls {
-      margin-bottom: 20px;
-    }
   </style>
 </head>
 <body>
   <h1>スクワット回数: <span id="count">0</span></h1>
-  <div id="ball"></div>
-
-  <div id="controls">
-    <label>BPM: <input type="number" id="bpmInput" value="60" min="30" max="200" /></label><br><br>
-    <label>タイムリミット（秒）: <input type="number" id="timeLimitInput" value="60" min="5" /></label><br><br>
-    <button onclick="startSession()">スタート</button>
-    <button onclick="stopSession()">ストップ</button>
-    <h2 id="timeDisplay"></h2>
-    <h2 id="commentDisplay"></h2>
-  </div>
-
+  <div id="stats"></div>
   <div id="log"></div>
 
   <script>
     let count = 0;
     let lastCountTime = 0;
-    const THRESHOLD = 2.5;
-    const MIN_INTERVAL = 800;
-    const maxPreloaded = 100;
-
-    let bpm = 60;
-    let beatInterval = 1000;
-    let beatTimer = null;
-    let timeLimit = 60;
-    let timer = null;
-    let timeRemaining = 0;
-    let active = false;
+    const MIN_INTERVAL = 800; // ミリ秒
+    const ANGLE_THRESHOLD = 40; // 度
+    let prevY = null;
+    let prevZ = null;
 
     const countElem = document.getElementById('count');
     const logElem = document.getElementById('log');
-    const ballElem = document.getElementById('ball');
-    const timeDisplay = document.getElementById('timeDisplay');
-    const commentDisplay = document.getElementById('commentDisplay');
-    const bpmInput = document.getElementById('bpmInput');
-    const timeLimitInput = document.getElementById('timeLimitInput');
-
-    function speak(text) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "ja-JP";
-      utterance.rate = 1.0;
-      utterance.pitch = 1.1;
-      window.speechSynthesis.speak(utterance);
-    }
-
-    function playBeep() {
-      const beep = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
-      beep.play();
-    }
+    const statsElem = document.getElementById('stats');
 
     function playCountSound(count) {
-      if (count <= maxPreloaded) {
-        speak(count.toString());
-      } else {
-        speak("カウント");
-      }
-    }
+      const maxPreloaded = 100;
+      let audioFile = '';
 
-    function handleSquatDetected() {
-      const now = Date.now();
-      if (!active) return;
-      if (now - lastCountTime > MIN_INTERVAL) {
-        count++;
-        countElem.textContent = count;
-        updateBallSize(count);
-        playCountSound(count);
-        showComment("HIT!");
-        lastCountTime = now;
-        saveLogEntry();
+      if (count <= maxPreloaded) {
+        audioFile = `count_audio/${count}.mp3`;
+      } else {
+        audioFile = 'ding.mp3';
       }
+
+      const audio = new Audio(audioFile);
+      audio.play().catch((e) => {
+        console.warn('Audio playback failed:', e);
+      });
     }
 
     function saveLogEntry() {
@@ -115,78 +63,67 @@
       renderLogs();
     }
 
+    function saveDailyCount() {
+      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      const dailyCounts = JSON.parse(localStorage.getItem('dailySquatCounts') || '{}');
+      dailyCounts[today] = (dailyCounts[today] || 0) + 1;
+      localStorage.setItem('dailySquatCounts', JSON.stringify(dailyCounts));
+      renderDailyStats();
+    }
+
     function renderLogs() {
       const logs = JSON.parse(localStorage.getItem('squatLogs') || '[]');
       logElem.textContent = logs.slice().reverse().join('\n');
     }
 
-    function updateBallSize(count) {
-      const minSize = 50;
-      const maxSize = 200;
-      const size = Math.min(minSize + (maxSize - minSize) * (count / 100), maxSize);
-      ballElem.style.width = size + 'px';
-      ballElem.style.height = size + 'px';
+    function renderDailyStats() {
+      const dailyCounts = JSON.parse(localStorage.getItem('dailySquatCounts') || '{}');
+      const entries = Object.entries(dailyCounts)
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([date, total]) => `${date}: ${total} 回`)
+        .join('\n');
+      statsElem.textContent = `📅 日別スクワット記録：\n${entries}`;
     }
 
-    function showComment(text) {
-      commentDisplay.textContent = text;
-      speak(text);
-      setTimeout(() => commentDisplay.textContent = '', 1000);
+    function handleSquatDetected() {
+      const now = Date.now();
+      if (now - lastCountTime > MIN_INTERVAL) {
+        count++;
+        countElem.textContent = count;
+        playCountSound(count);
+        saveLogEntry();
+        saveDailyCount();
+        lastCountTime = now;
+      }
     }
 
-    function startSession() {
-      count = 0;
-      countElem.textContent = count;
-      active = true;
-
-      bpm = parseInt(bpmInput.value);
-      beatInterval = 60000 / bpm;
-
-      timeLimit = parseInt(timeLimitInput.value);
-      timeRemaining = timeLimit;
-      updateTimeDisplay();
-
-      beatTimer = setInterval(() => {
-        ballElem.style.backgroundColor = '#ffa07a';
-        playBeep();
-        setTimeout(() => {
-          ballElem.style.backgroundColor = '#ff6347';
-        }, 150);
-      }, beatInterval);
-
-      timer = setInterval(() => {
-        timeRemaining--;
-        updateTimeDisplay();
-        if (timeRemaining <= 5) speak(`${timeRemaining}`);
-        if (timeRemaining <= 0) stopSession();
-      }, 1000);
-
-      speak("スタート！");
-    }
-
-    function stopSession() {
-      active = false;
-      clearInterval(beatTimer);
-      clearInterval(timer);
-      speak("ストップ！");
-    }
-
-    function updateTimeDisplay() {
-      timeDisplay.textContent = `残り時間: ${timeRemaining} 秒`;
-    }
-
-    // スクワット判定ロジック（y軸の加速度のみ）
+    // 改良されたスクワット判定（Y-Z角度の変化ベース）
     window.addEventListener('devicemotion', (event) => {
-      if (!active) return;
-      const y = event.accelerationIncludingGravity.y;
-      if (y < -THRESHOLD) {
+      const acc = event.accelerationIncludingGravity;
+      const y = acc.y;
+      const z = acc.z;
+
+      if (prevY === null || prevZ === null) {
+        prevY = y;
+        prevZ = z;
+        return;
+      }
+
+      const prevAngle = Math.atan2(prevY, prevZ) * (180 / Math.PI);
+      const currentAngle = Math.atan2(y, z) * (180 / Math.PI);
+      const angleDiff = Math.abs(currentAngle - prevAngle);
+
+      if (angleDiff > ANGLE_THRESHOLD) {
         handleSquatDetected();
       }
+
+      prevY = y;
+      prevZ = z;
     });
 
     window.onload = () => {
       renderLogs();
-      updateBallSize(0);
+      renderDailyStats();
     };
   </script>
 </body>
