@@ -2,129 +2,159 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>スクワットカウンター（角度判定）</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>スクワットリズムゲーム</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; text-align: center; }
-    #count { font-size: 48px; margin-bottom: 20px; }
-    #log, #stats {
-      margin-top: 20px;
-      font-size: 14px;
-      white-space: pre-line;
-      max-height: 200px;
-      overflow-y: scroll;
-      border-top: 1px solid #ccc;
-      padding-top: 10px;
-      text-align: left;
-      max-width: 400px;
-      margin: 0 auto;
+    body { font-family: sans-serif; text-align: center; padding: 20px; }
+    #ball {
+      margin: 20px auto;
+      width: 50px;
+      height: 50px;
+      background: #ff6347;
+      border-radius: 50%;
+      transition: width 0.3s, height 0.3s, background-color 0.1s;
     }
+    #count { font-size: 32px; margin: 10px; }
+    #result { font-size: 24px; height: 30px; margin-top: 10px; color: #333; }
+    #controls, #settings { margin: 10px 0; }
+    #timer { font-size: 24px; color: #444; margin-top: 10px; }
+    select, button { padding: 5px 10px; font-size: 16px; }
   </style>
 </head>
 <body>
-  <h1>スクワット回数: <span id="count">0</span></h1>
-  <div id="stats"></div>
-  <div id="log"></div>
+  <h1>スクワットカウンター🎵</h1>
+  <div id="ball"></div>
+  <div id="count">回数: 0</div>
+  <div id="result"></div>
+  <div id="timer">残り時間: -- 秒</div>
+
+  <div id="settings">
+    BPM:
+    <select id="bpmSelect">
+      <option value="60">60</option>
+      <option value="80" selected>80</option>
+      <option value="100">100</option>
+    </select>
+    &nbsp;&nbsp;タイムリミット（秒）:
+    <select id="timeLimit">
+      <option value="30">30</option>
+      <option value="60" selected>60</option>
+      <option value="90">90</option>
+    </select>
+  </div>
+
+  <div id="controls">
+    <button id="startBtn">スタート</button>
+    <button id="stopBtn" disabled>停止</button>
+  </div>
 
   <script>
     let count = 0;
-    let lastCountTime = 0;
-    const MIN_INTERVAL = 800; // ミリ秒
-    const ANGLE_THRESHOLD = 40; // 度
-    let prevY = null;
-    let prevZ = null;
+    let running = false;
+    let lastSquatTime = 0;
+    let nextBeat = Date.now();
+    let beatInterval = 750;
+    let timerInterval = null;
+    let gameTimeout = null;
+    let remaining = 60;
+    const THRESHOLD = 2.5;
+    const MIN_INTERVAL = 500;
 
-    const countElem = document.getElementById('count');
-    const logElem = document.getElementById('log');
-    const statsElem = document.getElementById('stats');
+    const ball = document.getElementById('ball');
+    const countDisplay = document.getElementById('count');
+    const resultDisplay = document.getElementById('result');
+    const timerDisplay = document.getElementById('timer');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const bpmSelect = document.getElementById('bpmSelect');
+    const timeLimitSelect = document.getElementById('timeLimit');
 
-    function playCountSound(count) {
-      const maxPreloaded = 100;
-      let audioFile = '';
-
-      if (count <= maxPreloaded) {
-        audioFile = `count_audio/${count}.mp3`;
-      } else {
-        audioFile = 'ding.mp3';
-      }
-
-      const audio = new Audio(audioFile);
-      audio.play().catch((e) => {
-        console.warn('Audio playback failed:', e);
-      });
+    // ボールのサイズ更新
+    function updateBall() {
+      const size = 50 + Math.min(count, 100) * 1.5;
+      ball.style.width = size + 'px';
+      ball.style.height = size + 'px';
     }
 
-    function saveLogEntry() {
-      const now = new Date();
-      const entry = `${now.toLocaleString()} に 1回スクワット`;
-      const logs = JSON.parse(localStorage.getItem('squatLogs') || '[]');
-      logs.push(entry);
-      localStorage.setItem('squatLogs', JSON.stringify(logs));
-      renderLogs();
-    }
-
-    function saveDailyCount() {
-      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-      const dailyCounts = JSON.parse(localStorage.getItem('dailySquatCounts') || '{}');
-      dailyCounts[today] = (dailyCounts[today] || 0) + 1;
-      localStorage.setItem('dailySquatCounts', JSON.stringify(dailyCounts));
-      renderDailyStats();
-    }
-
-    function renderLogs() {
-      const logs = JSON.parse(localStorage.getItem('squatLogs') || '[]');
-      logElem.textContent = logs.slice().reverse().join('\n');
-    }
-
-    function renderDailyStats() {
-      const dailyCounts = JSON.parse(localStorage.getItem('dailySquatCounts') || '{}');
-      const entries = Object.entries(dailyCounts)
-        .sort((a, b) => b[0].localeCompare(a[0]))
-        .map(([date, total]) => `${date}: ${total} 回`)
-        .join('\n');
-      statsElem.textContent = `📅 日別スクワット記録：\n${entries}`;
-    }
-
-    function handleSquatDetected() {
+    // スクワット検出
+    function handleSquat() {
       const now = Date.now();
-      if (now - lastCountTime > MIN_INTERVAL) {
-        count++;
-        countElem.textContent = count;
-        playCountSound(count);
-        saveLogEntry();
-        saveDailyCount();
-        lastCountTime = now;
-      }
+      if (!running || now - lastSquatTime < MIN_INTERVAL) return;
+
+      const diff = Math.abs(now - nextBeat);
+      let feedback = 'Miss';
+
+      if (diff < 200) feedback = 'Great!';
+      else if (diff < 400) feedback = 'Hit!';
+
+      count++;
+      lastSquatTime = now;
+      countDisplay.textContent = `回数: ${count}`;
+      resultDisplay.textContent = feedback;
+      updateBall();
     }
 
-    // 改良されたスクワット判定（Y-Z角度の変化ベース）
-    window.addEventListener('devicemotion', (event) => {
-      const acc = event.accelerationIncludingGravity;
-      const y = acc.y;
-      const z = acc.z;
-
-      if (prevY === null || prevZ === null) {
-        prevY = y;
-        prevZ = z;
-        return;
+    // リズムパルス（BPMにあわせてボール点滅）
+    function rhythmLoop() {
+      if (!running) return;
+      const now = Date.now();
+      if (now >= nextBeat) {
+        ball.style.backgroundColor = '#ffa07a';
+        setTimeout(() => {
+          ball.style.backgroundColor = '#ff6347';
+        }, 150);
+        nextBeat += beatInterval;
       }
+      requestAnimationFrame(rhythmLoop);
+    }
 
-      const prevAngle = Math.atan2(prevY, prevZ) * (180 / Math.PI);
-      const currentAngle = Math.atan2(y, z) * (180 / Math.PI);
-      const angleDiff = Math.abs(currentAngle - prevAngle);
+    // タイマー更新
+    function startTimer(seconds) {
+      remaining = seconds;
+      timerDisplay.textContent = `残り時間: ${remaining} 秒`;
+      timerInterval = setInterval(() => {
+        remaining--;
+        timerDisplay.textContent = `残り時間: ${remaining} 秒`;
+        if (remaining <= 0) stopGame();
+      }, 1000);
+    }
 
-      if (angleDiff > ANGLE_THRESHOLD) {
-        handleSquatDetected();
+    // ゲーム開始
+    function startGame() {
+      count = 0;
+      updateBall();
+      countDisplay.textContent = `回数: 0`;
+      resultDisplay.textContent = '';
+      running = true;
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      const bpm = parseInt(bpmSelect.value);
+      const timeLimit = parseInt(timeLimitSelect.value);
+      beatInterval = 60000 / bpm;
+      nextBeat = Date.now() + beatInterval;
+      startTimer(timeLimit);
+      rhythmLoop();
+    }
+
+    // ゲーム停止
+    function stopGame() {
+      running = false;
+      clearInterval(timerInterval);
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      timerDisplay.textContent = `終了！おつかれさま`;
+    }
+
+    startBtn.addEventListener('click', startGame);
+    stopBtn.addEventListener('click', stopGame);
+
+    // 加速度イベント
+    window.addEventListener('devicemotion', (e) => {
+      const y = e.accelerationIncludingGravity.y;
+      if (y < -THRESHOLD) {
+        handleSquat();
       }
-
-      prevY = y;
-      prevZ = z;
     });
-
-    window.onload = () => {
-      renderLogs();
-      renderDailyStats();
-    };
   </script>
 </body>
 </html>
