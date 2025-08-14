@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>スクワットカウンター（返りの黄金バランス＋休憩）</title>
+  <title>スクワットカウンター（黄金バランス＋休憩）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body { font-family: sans-serif; padding: 20px; text-align: center; }
@@ -46,6 +46,16 @@
       </select>
     </label><br><br>
 
+    <label>休憩時間（秒）:
+      <select id="restTimeSelect">
+        <script>
+          for (let sec = 30; sec <= 120; sec += 15) {
+            document.write(`<option value="${sec}">${sec}秒</option>`);
+          }
+        </script>
+      </select>
+    </label><br><br>
+
     <label>セット数:
       <select id="setCountSelect">
         <script>
@@ -83,6 +93,7 @@
     const bpmSelect = document.getElementById('bpmSelect');
     const timeLimitSelect = document.getElementById('timeLimitSelect');
     const setCountSelect = document.getElementById('setCountSelect');
+    const restTimeSelect = document.getElementById('restTimeSelect');
     const timerDisplay = document.getElementById('timerDisplay');
     const setDisplay = document.getElementById('setDisplay');
 
@@ -146,18 +157,6 @@
       osc.stop(audioCtx.currentTime + 0.1);
     }
 
-    function playClick() {
-      const osc = audioCtx.createOscillator();
-      const gainNode = audioCtx.createGain();
-      osc.type = 'square';
-      osc.frequency.value = 1800;
-      gainNode.gain.value = 0.1;
-      osc.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.05);
-    }
-
     function flashBall() {
       ballElem.style.backgroundColor = '#ffa07a';
       setTimeout(() => ballElem.style.backgroundColor = '#ff6347', 150);
@@ -172,9 +171,6 @@
         lastBeatTime = Date.now();
         playBeep();
         flashBall();
-        if (Math.random() < 0.3) {
-          setTimeout(playClick, bpmInterval / 2);
-        }
       }, bpmInterval);
     }
 
@@ -201,7 +197,7 @@
     }
 
     function startRest() {
-      let restTime = 60;
+      let restTime = parseInt(restTimeSelect.value);
       speak(`セット${currentSet}終了。休憩${restTime}秒`);
       timerDisplay.textContent = `休憩: ${restTime}秒`;
       setDisplay.textContent = `次はセット${currentSet + 1}/${totalSets}`;
