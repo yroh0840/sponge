@@ -1,75 +1,159 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<title>音程・リズム簡易測定</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-  body { font-family: sans-serif; text-align:center; padding:20px; }
-  #pitch { font-size:32px; margin:20px; }
-  #rhythm { font-size:24px; margin:20px; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>スクワットリズムゲーム - 音階表示版</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 20px; }
+    #ball {
+      margin: 20px auto;
+      width: 50px;
+      height: 50px;
+      background: #ff6347;
+      border-radius: 50%;
+      transition: width 0.3s, height 0.3s, background-color 0.1s;
+    }
+    #note { font-size: 48px; margin: 10px; }
+    #result { font-size: 24px; height: 30px; margin-top: 10px; color: #333; }
+    #timer { font-size: 24px; color: #444; margin-top: 10px; }
+    select, button { padding: 5px 10px; font-size: 16px; margin: 5px; }
+  </style>
 </head>
 <body>
-<h1>簡易カラオケ測定</h1>
-<button id="startBtn">測定開始</button>
-<div id="pitch">音程: -- Hz</div>
-<div id="rhythm">リズム: --</div>
+  <h1>スクワットリズムゲーム 🎵</h1>
+  <div id="ball"></div>
+  <div id="note">C</div>
+  <div id="result"></div>
+  <div id="timer">残り時間: -- 秒</div>
 
-<script>
-let audioCtx, analyser, dataArray, source;
-let lastOnset = 0;
+  <div>
+    BPM:
+    <select id="bpmSelect">
+      <option value="60">60</option>
+      <option value="80" selected>80</option>
+      <option value="100">100</option>
+    </select>
+    タイムリミット（秒）:
+    <select id="timeLimit">
+      <option value="30">30</option>
+      <option value="60" selected>60</option>
+      <option value="90">90</option>
+    </select>
+  </div>
 
-function autoCorrelate(buffer, sampleRate) {
-    // 簡易ピッチ検出
-    let SIZE = buffer.length;
-    let rms = 0;
-    for (let i = 0; i < SIZE; i++) rms += buffer[i]*buffer[i];
-    rms = Math.sqrt(rms/SIZE);
-    if (rms < 0.01) return -1; // 静寂
-    let r = new Array(SIZE).fill(0);
-    for (let tau = 0; tau < SIZE; tau++) {
-        for (let i = 0; i < SIZE - tau; i++) r[tau] += buffer[i]*buffer[i+tau];
+  <div>
+    <button id="startBtn">スタート</button>
+    <button id="stopBtn" disabled>停止</button>
+  </div>
+
+  <script>
+    const notes = ["C", "D", "E", "F", "G", "A", "B"];
+    let count = 0;
+    let running = false;
+    let lastSquatTime = 0;
+    let nextBeat = Date.now();
+    let beatInterval = 750;
+    let timerInterval = null;
+    let remaining = 60;
+    const THRESHOLD = 2.5;
+    const MIN_INTERVAL = 500;
+
+    const ball = document.getElementById('ball');
+    const noteDisplay = document.getElementById('note');
+    const resultDisplay = document.getElementById('result');
+    const timerDisplay = document.getElementById('timer');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const bpmSelect = document.getElementById('bpmSelect');
+    const timeLimitSelect = document.getElementById('timeLimit');
+
+    function updateBall() {
+      const size = 50 + Math.min(count, 100) * 1.5;
+      ball.style.width = size + 'px';
+      ball.style.height = size + 'px';
     }
-    let d = 0; while(r[d]>r[d+1]) d++;
-    let maxval = -1, maxpos = -1;
-    for (let i = d; i < SIZE; i++) {
-        if (r[i] > maxval) { maxval = r[i]; maxpos = i; }
-    }
-    if (maxpos == -1) return -1;
-    return sampleRate/maxpos;
-}
 
-async function startAudio() {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    source = audioCtx.createMediaStreamSource(stream);
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 2048;
-    source.connect(analyser);
-    dataArray = new Float32Array(analyser.fftSize);
-    detectPitch();
-}
-
-function detectPitch() {
-    analyser.getFloatTimeDomainData(dataArray);
-    const pitch = autoCorrelate(dataArray, audioCtx.sampleRate);
-    document.getElementById('pitch').textContent = pitch > 0 ? `音程: ${pitch.toFixed(1)} Hz` : "音程: -- Hz";
-
-    // 簡易リズム判定（音が出たタイミング）
-    let maxAmp = Math.max(...dataArray.map(v => Math.abs(v)));
-    const now = Date.now();
-    if(maxAmp > 0.05 && now - lastOnset > 300) { 
-        document.getElementById('rhythm').textContent = "リズム: Hit!";
-        lastOnset = now;
+    function speak(text) {
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'ja-JP';
+      window.speechSynthesis.speak(utter);
     }
 
-    requestAnimationFrame(detectPitch);
-}
+    function handleSquat() {
+      const now = Date.now();
+      if (!running || now - lastSquatTime < MIN_INTERVAL) return;
 
-document.getElementById('startBtn').addEventListener('click', () => {
-    startAudio();
-});
-</script>
+      const diff = Math.abs(now - nextBeat);
+      let feedback = 'Miss';
+      if (diff < 200) feedback = 'Great!';
+      else if (diff < 400) feedback = 'Hit!';
+
+      // 音階表示
+      const note = notes[count % notes.length];
+      noteDisplay.textContent = note;
+      speak(note);
+
+      count++;
+      lastSquatTime = now;
+      resultDisplay.textContent = feedback;
+      updateBall();
+    }
+
+    function rhythmLoop() {
+      if (!running) return;
+      const now = Date.now();
+      if (now >= nextBeat) {
+        ball.style.backgroundColor = '#ffa07a';
+        setTimeout(() => { ball.style.backgroundColor = '#ff6347'; }, 150);
+        nextBeat += beatInterval;
+      }
+      requestAnimationFrame(rhythmLoop);
+    }
+
+    function startTimer(seconds) {
+      remaining = seconds;
+      timerDisplay.textContent = `残り時間: ${remaining} 秒`;
+      timerInterval = setInterval(() => {
+        remaining--;
+        timerDisplay.textContent = `残り時間: ${remaining} 秒`;
+        if (remaining <= 0) stopGame();
+      }, 1000);
+    }
+
+    function startGame() {
+      count = 0;
+      updateBall();
+      noteDisplay.textContent = notes[0];
+      resultDisplay.textContent = '';
+      running = true;
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      const bpm = parseInt(bpmSelect.value);
+      const timeLimit = parseInt(timeLimitSelect.value);
+      beatInterval = 60000 / bpm;
+      nextBeat = Date.now() + beatInterval;
+      startTimer(timeLimit);
+      rhythmLoop();
+    }
+
+    function stopGame() {
+      running = false;
+      clearInterval(timerInterval);
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      timerDisplay.textContent = `終了！おつかれさま`;
+    }
+
+    startBtn.addEventListener('click', startGame);
+    stopBtn.addEventListener('click', stopGame);
+
+    // 加速度イベント（スクワット判定）
+    window.addEventListener('devicemotion', (e) => {
+      const y = e.accelerationIncludingGravity.y;
+      if (y < -THRESHOLD) handleSquat();
+    });
+  </script>
 </body>
 </html>
