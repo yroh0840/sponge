@@ -3,74 +3,58 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ジャンプ検出テスト</title>
+  <title>ジャンプ検出テスト（シンプル版）</title>
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 20px; }
-    #count { font-size: 32px; margin: 20px; }
-    #status { font-size: 24px; margin: 10px; color: #333; }
+    body { font-family: sans-serif; text-align: center; padding: 40px; }
     button { padding: 10px 20px; font-size: 18px; }
+    p { font-size: 20px; margin-top: 20px; }
   </style>
 </head>
 <body>
-  <h1>ジャンプ検出テスト</h1>
-  <div id="count">ジャンプ回数: 0</div>
-  <div id="status">待機中...</div>
+  <h1>ジャンプ検出テスト（シンプル版）</h1>
   <button id="startBtn">開始</button>
+  <p>結果はブラウザのコンソールに表示されます</p>
 
   <script>
-    let jumpCount = 0;
     let jumping = false;
-    let running = false;
+    let jumpCount = 0;
 
-    const countDisplay = document.getElementById("count");
-    const statusDisplay = document.getElementById("status");
-    const startBtn = document.getElementById("startBtn");
+    function startDetection() {
+      if (typeof DeviceMotionEvent.requestPermission === "function") {
+        // iOSの場合は許可をリクエスト
+        DeviceMotionEvent.requestPermission().then(response => {
+          if (response === "granted") {
+            window.addEventListener("devicemotion", handleMotion);
+            console.log("ジャンプ検出開始！");
+          } else {
+            console.log("センサー利用が拒否されました");
+          }
+        });
+      } else {
+        // Androidなどはそのまま使える
+        window.addEventListener("devicemotion", handleMotion);
+        console.log("ジャンプ検出開始！");
+      }
+    }
 
-    function handleJump(z) {
-      if (!running) return;
+    function handleMotion(e) {
+      const z = e.accelerationIncludingGravity.z;
 
       if (!jumping && Math.abs(z) < 2) {
         // 宙に浮いた！
         jumping = true;
-        statusDisplay.textContent = "ジャンプ中！🕴️";
+        console.log("ジャンプ中！🕴️");
       }
 
       if (jumping && Math.abs(z) > 15) {
-        // 着地！
+        // 着地した！
         jumpCount++;
-        countDisplay.textContent = `ジャンプ回数: ${jumpCount}`;
-        statusDisplay.textContent = "着地 ✅";
+        console.log("ジャンプ回数:", jumpCount);
         jumping = false;
       }
     }
 
-    startBtn.addEventListener("click", () => {
-      running = true;
-      jumpCount = 0;
-      jumping = false;
-      countDisplay.textContent = "ジャンプ回数: 0";
-      statusDisplay.textContent = "検出開始！端末を持ってジャンプしてね";
-
-      if (typeof DeviceMotionEvent.requestPermission === "function") {
-        // iOS用の許可リクエスト
-        DeviceMotionEvent.requestPermission().then(response => {
-          if (response === "granted") {
-            window.addEventListener("devicemotion", (e) => {
-              const z = e.accelerationIncludingGravity.z;
-              handleJump(z);
-            });
-          } else {
-            statusDisplay.textContent = "センサー利用が拒否されました";
-          }
-        });
-      } else {
-        // AndroidやPC用
-        window.addEventListener("devicemotion", (e) => {
-          const z = e.accelerationIncludingGravity.z;
-          handleJump(z);
-        });
-      }
-    });
+    document.getElementById("startBtn").addEventListener("click", startDetection);
   </script>
 </body>
 </html>
