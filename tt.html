@@ -2,128 +2,159 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>スクワットカウンター（モード切替＋音声＋波形）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>スクワットリズムゲーム</title>
   <style>
     body { font-family: sans-serif; text-align: center; padding: 20px; }
-    canvas { border: 1px solid #ccc; display: block; margin: 20px auto; }
-    label { font-weight: bold; }
+    #ball {
+      margin: 20px auto;
+      width: 50px;
+      height: 50px;
+      background: #ff6347;
+      border-radius: 50%;
+      transition: width 0.3s, height 0.3s, background-color 0.1s;
+    }
+    #count { font-size: 32px; margin: 10px; }
+    #result { font-size: 24px; height: 30px; margin-top: 10px; color: #333; }
+    #controls, #settings { margin: 10px 0; }
+    #timer { font-size: 24px; color: #444; margin-top: 10px; }
+    select, button { padding: 5px 10px; font-size: 16px; }
   </style>
 </head>
 <body>
-  <h1>スクワット回数: <span id="count">0</span></h1>
+  <h1>スクワットカウンター🎵</h1>
+  <div id="ball"></div>
+  <div id="count">回数: 0</div>
+  <div id="result"></div>
+  <div id="timer">残り時間: -- 秒</div>
 
-  <label>モード切替:
-    <select id="mode">
-      <option value="pocket">ポケットモード（y軸傾き）</option>
-      <option value="handheld">手持ちモード（加速度）</option>
+  <div id="settings">
+    BPM:
+    <select id="bpmSelect">
+      <option value="60">60</option>
+      <option value="80" selected>80</option>
+      <option value="100">100</option>
     </select>
-  </label><br><br>
+    &nbsp;&nbsp;タイムリミット（秒）:
+    <select id="timeLimit">
+      <option value="30">30</option>
+      <option value="60" selected>60</option>
+      <option value="90">90</option>
+    </select>
+  </div>
 
-  <label>感度（しきい値）: <span id="thresholdValue">2.5</span>
-    <input type="range" id="threshold" min="1" max="5" step="0.1" value="2.5" />
-  </label>
-
-  <canvas id="graph" width="500" height="200"></canvas>
+  <div id="controls">
+    <button id="startBtn">スタート</button>
+    <button id="stopBtn" disabled>停止</button>
+  </div>
 
   <script>
     let count = 0;
-    let direction = 'none';
-    let lastY = 0;
-    let lastTime = 0;
-    let directionLockTime = 0;
-    const ctx = document.getElementById("graph").getContext("2d");
-    let accelHistory = [];
+    let running = false;
+    let lastSquatTime = 0;
+    let nextBeat = Date.now();
+    let beatInterval = 750;
+    let timerInterval = null;
+    let gameTimeout = null;
+    let remaining = 60;
+    const THRESHOLD = 2.5;
+    const MIN_INTERVAL = 500;
 
-    const thresholdInput = document.getElementById("threshold");
-    const thresholdValue = document.getElementById("thresholdValue");
-    const modeSelect = document.getElementById("mode");
+    const ball = document.getElementById('ball');
+    const countDisplay = document.getElementById('count');
+    const resultDisplay = document.getElementById('result');
+    const timerDisplay = document.getElementById('timer');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const bpmSelect = document.getElementById('bpmSelect');
+    const timeLimitSelect = document.getElementById('timeLimit');
 
-    let THRESHOLD = parseFloat(thresholdInput.value);
+    // ボールのサイズ更新
+    function updateBall() {
+      const size = 50 + Math.min(count, 100) * 1.5;
+      ball.style.width = size + 'px';
+      ball.style.height = size + 'px';
+    }
 
-    thresholdInput.addEventListener("input", () => {
-      THRESHOLD = parseFloat(thresholdInput.value);
-      thresholdValue.textContent = THRESHOLD;
+    // スクワット検出
+    function handleSquat() {
+      const now = Date.now();
+      if (!running || now - lastSquatTime < MIN_INTERVAL) return;
+
+      const diff = Math.abs(now - nextBeat);
+      let feedback = 'Miss';
+
+      if (diff < 200) feedback = 'Great!';
+      else if (diff < 400) feedback = 'Hit!';
+
+      count++;
+      lastSquatTime = now;
+      countDisplay.textContent = `回数: ${count}`;
+      resultDisplay.textContent = feedback;
+      updateBall();
+    }
+
+    // リズムパルス（BPMにあわせてボール点滅）
+    function rhythmLoop() {
+      if (!running) return;
+      const now = Date.now();
+      if (now >= nextBeat) {
+        ball.style.backgroundColor = '#ffa07a';
+        setTimeout(() => {
+          ball.style.backgroundColor = '#ff6347';
+        }, 150);
+        nextBeat += beatInterval;
+      }
+      requestAnimationFrame(rhythmLoop);
+    }
+
+    // タイマー更新
+    function startTimer(seconds) {
+      remaining = seconds;
+      timerDisplay.textContent = `残り時間: ${remaining} 秒`;
+      timerInterval = setInterval(() => {
+        remaining--;
+        timerDisplay.textContent = `残り時間: ${remaining} 秒`;
+        if (remaining <= 0) stopGame();
+      }, 1000);
+    }
+
+    // ゲーム開始
+    function startGame() {
+      count = 0;
+      updateBall();
+      countDisplay.textContent = `回数: 0`;
+      resultDisplay.textContent = '';
+      running = true;
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      const bpm = parseInt(bpmSelect.value);
+      const timeLimit = parseInt(timeLimitSelect.value);
+      beatInterval = 60000 / bpm;
+      nextBeat = Date.now() + beatInterval;
+      startTimer(timeLimit);
+      rhythmLoop();
+    }
+
+    // ゲーム停止
+    function stopGame() {
+      running = false;
+      clearInterval(timerInterval);
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      timerDisplay.textContent = `終了！おつかれさま`;
+    }
+
+    startBtn.addEventListener('click', startGame);
+    stopBtn.addEventListener('click', stopGame);
+
+    // 加速度イベント
+    window.addEventListener('devicemotion', (e) => {
+      const y = e.accelerationIncludingGravity.y;
+      if (y < -THRESHOLD) {
+        handleSquat();
+      }
     });
-
-    function speak(text) {
-      window.speechSynthesis.cancel(); // 読み上げが被らないように
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "ja-JP";
-      utterance.rate = 1.0;
-      utterance.pitch = 1.1;
-      window.speechSynthesis.speak(utterance);
-    }
-
-    if (window.DeviceMotionEvent) {
-      window.addEventListener("devicemotion", function(event) {
-        const x = event.accelerationIncludingGravity.x || 0;
-        const y = event.accelerationIncludingGravity.y || 0;
-        const z = event.accelerationIncludingGravity.z || 0;
-
-        const magnitude = Math.sqrt(x * x + y * y + z * z);
-        accelHistory.push(magnitude);
-        if (accelHistory.length > 100) accelHistory.shift();
-
-        const now = Date.now();
-        const mode = modeSelect.value;
-
-        // ----- 判定ロジック -----
-        if (mode === "handheld") {
-          const delta = magnitude - 9.8;
-
-          if (delta < -THRESHOLD && direction === 'none') {
-            direction = 'down';
-            directionLockTime = now;
-          }
-
-          if (delta > THRESHOLD && direction === 'down') {
-            if (now - directionLockTime > 300) {
-              count++;
-              document.getElementById("count").textContent = count;
-              speak(count.toString());
-              direction = 'none';
-            }
-          }
-        } else if (mode === "pocket") {
-          const deltaY = Math.abs(y - lastY);
-          lastY = y;
-
-          if (y < -THRESHOLD && direction === 'none') {
-            direction = 'down';
-            directionLockTime = now;
-          }
-
-          if (y > THRESHOLD && direction === 'down') {
-            if (deltaY > 1 && now - directionLockTime > 300) {
-              count++;
-              document.getElementById("count").textContent = count;
-              speak(count.toString());
-              direction = 'none';
-            }
-          }
-        }
-
-        // ----- グラフ描画 -----
-        ctx.clearRect(0, 0, 500, 200);
-        ctx.beginPath();
-        accelHistory.forEach((val, i) => {
-          const yPos = 200 - val * 10;
-          ctx.lineTo(i * 5, yPos);
-        });
-        ctx.stroke();
-
-        // しきい値ライン
-        ctx.beginPath();
-        ctx.strokeStyle = 'red';
-        const threshLine = 200 - (9.8 + THRESHOLD) * 10;
-        ctx.moveTo(0, threshLine);
-        ctx.lineTo(500, threshLine);
-        ctx.stroke();
-        ctx.strokeStyle = 'black';
-      }, true);
-    } else {
-      alert("この端末は加速度センサーに対応していません。");
-    }
   </script>
 </body>
 </html>
