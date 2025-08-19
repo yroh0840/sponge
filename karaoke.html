@@ -2,157 +2,68 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>スクワットリズムゲーム - 音階表示版</title>
+  <title>音階テスト</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 20px; }
-    #ball {
-      margin: 20px auto;
-      width: 50px;
-      height: 50px;
-      background: #ff6347;
-      border-radius: 50%;
-      transition: width 0.3s, height 0.3s, background-color 0.1s;
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 20px;
     }
-    #note { font-size: 48px; margin: 10px; }
-    #result { font-size: 24px; height: 30px; margin-top: 10px; color: #333; }
-    #timer { font-size: 24px; color: #444; margin-top: 10px; }
-    select, button { padding: 5px 10px; font-size: 16px; margin: 5px; }
+    #noteDisplay {
+      font-size: 72px;
+      margin: 40px 0;
+      color: #ff6347;
+    }
+    button {
+      font-size: 18px;
+      padding: 10px 20px;
+      margin: 5px;
+    }
   </style>
 </head>
 <body>
-  <h1>スクワットリズムゲーム 🎵</h1>
-  <div id="ball"></div>
-  <div id="note">C</div>
-  <div id="result"></div>
-  <div id="timer">残り時間: -- 秒</div>
-
-  <div>
-    BPM:
-    <select id="bpmSelect">
-      <option value="60">60</option>
-      <option value="80" selected>80</option>
-      <option value="100">100</option>
-    </select>
-    タイムリミット（秒）:
-    <select id="timeLimit">
-      <option value="30">30</option>
-      <option value="60" selected>60</option>
-      <option value="90">90</option>
-    </select>
-  </div>
-
-  <div>
-    <button id="startBtn">スタート</button>
-    <button id="stopBtn" disabled>停止</button>
-  </div>
+  <h1>音階テスト</h1>
+  <div id="noteDisplay">--</div>
+  <button id="startBtn">スタート</button>
+  <button id="stopBtn" disabled>ストップ</button>
 
   <script>
-    const notes = ["C", "D", "E", "F", "G", "A", "B"];
-    let count = 0;
-    let running = false;
-    let lastSquatTime = 0;
-    let nextBeat = Date.now();
-    let beatInterval = 750;
-    let timerInterval = null;
-    let remaining = 60;
-    const THRESHOLD = 2.5;
-    const MIN_INTERVAL = 500;
+    const notes = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+    let currentIndex = 0;
+    let intervalId = null;
 
-    const ball = document.getElementById('ball');
-    const noteDisplay = document.getElementById('note');
-    const resultDisplay = document.getElementById('result');
-    const timerDisplay = document.getElementById('timer');
+    const noteDisplay = document.getElementById('noteDisplay');
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
-    const bpmSelect = document.getElementById('bpmSelect');
-    const timeLimitSelect = document.getElementById('timeLimit');
 
-    function updateBall() {
-      const size = 50 + Math.min(count, 100) * 1.5;
-      ball.style.width = size + 'px';
-      ball.style.height = size + 'px';
-    }
-
-    function speak(text) {
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(text);
+    function speak(note) {
+      const utter = new SpeechSynthesisUtterance(note);
       utter.lang = 'ja-JP';
       window.speechSynthesis.speak(utter);
     }
 
-    function handleSquat() {
-      const now = Date.now();
-      if (!running || now - lastSquatTime < MIN_INTERVAL) return;
-
-      const diff = Math.abs(now - nextBeat);
-      let feedback = 'Miss';
-      if (diff < 200) feedback = 'Great!';
-      else if (diff < 400) feedback = 'Hit!';
-
-      // 音階表示
-      const note = notes[count % notes.length];
+    function showNextNote() {
+      const note = notes[currentIndex];
       noteDisplay.textContent = note;
       speak(note);
-
-      count++;
-      lastSquatTime = now;
-      resultDisplay.textContent = feedback;
-      updateBall();
+      currentIndex = (currentIndex + 1) % notes.length;
     }
 
-    function rhythmLoop() {
-      if (!running) return;
-      const now = Date.now();
-      if (now >= nextBeat) {
-        ball.style.backgroundColor = '#ffa07a';
-        setTimeout(() => { ball.style.backgroundColor = '#ff6347'; }, 150);
-        nextBeat += beatInterval;
-      }
-      requestAnimationFrame(rhythmLoop);
-    }
-
-    function startTimer(seconds) {
-      remaining = seconds;
-      timerDisplay.textContent = `残り時間: ${remaining} 秒`;
-      timerInterval = setInterval(() => {
-        remaining--;
-        timerDisplay.textContent = `残り時間: ${remaining} 秒`;
-        if (remaining <= 0) stopGame();
-      }, 1000);
-    }
-
-    function startGame() {
-      count = 0;
-      updateBall();
-      noteDisplay.textContent = notes[0];
-      resultDisplay.textContent = '';
-      running = true;
+    startBtn.addEventListener('click', () => {
       startBtn.disabled = true;
       stopBtn.disabled = false;
-      const bpm = parseInt(bpmSelect.value);
-      const timeLimit = parseInt(timeLimitSelect.value);
-      beatInterval = 60000 / bpm;
-      nextBeat = Date.now() + beatInterval;
-      startTimer(timeLimit);
-      rhythmLoop();
-    }
+      currentIndex = 0;
+      showNextNote();
+      intervalId = setInterval(showNextNote, 1000); // 1秒ごとに次の音階
+    });
 
-    function stopGame() {
-      running = false;
-      clearInterval(timerInterval);
+    stopBtn.addEventListener('click', () => {
       startBtn.disabled = false;
       stopBtn.disabled = true;
-      timerDisplay.textContent = `終了！おつかれさま`;
-    }
-
-    startBtn.addEventListener('click', startGame);
-    stopBtn.addEventListener('click', stopGame);
-
-    // 加速度イベント（スクワット判定）
-    window.addEventListener('devicemotion', (e) => {
-      const y = e.accelerationIncludingGravity.y;
-      if (y < -THRESHOLD) handleSquat();
+      clearInterval(intervalId);
+      noteDisplay.textContent = '--';
+      window.speechSynthesis.cancel();
     });
   </script>
 </body>
