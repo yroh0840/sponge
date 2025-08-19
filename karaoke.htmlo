@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>音程・リズム簡易測定</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: sans-serif; text-align:center; padding:20px; }
+  #pitch { font-size:32px; margin:20px; }
+  #rhythm { font-size:24px; margin:20px; }
+</style>
+</head>
+<body>
+<h1>簡易カラオケ測定</h1>
+<button id="startBtn">測定開始</button>
+<div id="pitch">音程: -- Hz</div>
+<div id="rhythm">リズム: --</div>
+
+<script>
+let audioCtx, analyser, dataArray, source;
+let lastOnset = 0;
+
+function autoCorrelate(buffer, sampleRate) {
+    // 簡易ピッチ検出
+    let SIZE = buffer.length;
+    let rms = 0;
+    for (let i = 0; i < SIZE; i++) rms += buffer[i]*buffer[i];
+    rms = Math.sqrt(rms/SIZE);
+    if (rms < 0.01) return -1; // 静寂
+    let r = new Array(SIZE).fill(0);
+    for (let tau = 0; tau < SIZE; tau++) {
+        for (let i = 0; i < SIZE - tau; i++) r[tau] += buffer[i]*buffer[i+tau];
+    }
+    let d = 0; while(r[d]>r[d+1]) d++;
+    let maxval = -1, maxpos = -1;
+    for (let i = d; i < SIZE; i++) {
+        if (r[i] > maxval) { maxval = r[i]; maxpos = i; }
+    }
+    if (maxpos == -1) return -1;
+    return sampleRate/maxpos;
+}
+
+async function startAudio() {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    source = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    source.connect(analyser);
+    dataArray = new Float32Array(analyser.fftSize);
+    detectPitch();
+}
+
+function detectPitch() {
+    analyser.getFloatTimeDomainData(dataArray);
+    const pitch = autoCorrelate(dataArray, audioCtx.sampleRate);
+    document.getElementById('pitch').textContent = pitch > 0 ? `音程: ${pitch.toFixed(1)} Hz` : "音程: -- Hz";
+
+    // 簡易リズム判定（音が出たタイミング）
+    let maxAmp = Math.max(...dataArray.map(v => Math.abs(v)));
+    const now = Date.now();
+    if(maxAmp > 0.05 && now - lastOnset > 300) { 
+        document.getElementById('rhythm').textContent = "リズム: Hit!";
+        lastOnset = now;
+    }
+
+    requestAnimationFrame(detectPitch);
+}
+
+document.getElementById('startBtn').addEventListener('click', () => {
+    startAudio();
+});
+</script>
+</body>
+</html>
