@@ -3,156 +3,72 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>スクワットリズムゲーム</title>
+  <title>ジャンプ検出テスト</title>
   <style>
     body { font-family: sans-serif; text-align: center; padding: 20px; }
-    #ball {
-      margin: 20px auto;
-      width: 50px;
-      height: 50px;
-      background: #ff6347;
-      border-radius: 50%;
-      transition: width 0.3s, height 0.3s, background-color 0.1s;
-    }
-    #count { font-size: 32px; margin: 10px; }
-    #result { font-size: 24px; height: 30px; margin-top: 10px; color: #333; }
-    #controls, #settings { margin: 10px 0; }
-    #timer { font-size: 24px; color: #444; margin-top: 10px; }
-    select, button { padding: 5px 10px; font-size: 16px; }
+    #count { font-size: 32px; margin: 20px; }
+    #status { font-size: 24px; margin: 10px; color: #333; }
+    button { padding: 10px 20px; font-size: 18px; }
   </style>
 </head>
 <body>
-  <h1>スクワットカウンター🎵</h1>
-  <div id="ball"></div>
-  <div id="count">回数: 0</div>
-  <div id="result"></div>
-  <div id="timer">残り時間: -- 秒</div>
-
-  <div id="settings">
-    BPM:
-    <select id="bpmSelect">
-      <option value="60">60</option>
-      <option value="80" selected>80</option>
-      <option value="100">100</option>
-    </select>
-    &nbsp;&nbsp;タイムリミット（秒）:
-    <select id="timeLimit">
-      <option value="30">30</option>
-      <option value="60" selected>60</option>
-      <option value="90">90</option>
-    </select>
-  </div>
-
-  <div id="controls">
-    <button id="startBtn">スタート</button>
-    <button id="stopBtn" disabled>停止</button>
-  </div>
+  <h1>ジャンプ検出テスト</h1>
+  <div id="count">ジャンプ回数: 0</div>
+  <div id="status">待機中...</div>
+  <button id="startBtn">開始</button>
 
   <script>
-    let count = 0;
+    let jumpCount = 0;
+    let jumping = false;
     let running = false;
-    let lastSquatTime = 0;
-    let nextBeat = Date.now();
-    let beatInterval = 750;
-    let timerInterval = null;
-    let gameTimeout = null;
-    let remaining = 60;
-    const THRESHOLD = 2.5;
-    const MIN_INTERVAL = 500;
 
-    const ball = document.getElementById('ball');
-    const countDisplay = document.getElementById('count');
-    const resultDisplay = document.getElementById('result');
-    const timerDisplay = document.getElementById('timer');
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const bpmSelect = document.getElementById('bpmSelect');
-    const timeLimitSelect = document.getElementById('timeLimit');
+    const countDisplay = document.getElementById("count");
+    const statusDisplay = document.getElementById("status");
+    const startBtn = document.getElementById("startBtn");
 
-    // ボールのサイズ更新
-    function updateBall() {
-      const size = 50 + Math.min(count, 100) * 1.5;
-      ball.style.width = size + 'px';
-      ball.style.height = size + 'px';
-    }
-
-    // スクワット検出
-    function handleSquat() {
-      const now = Date.now();
-      if (!running || now - lastSquatTime < MIN_INTERVAL) return;
-
-      const diff = Math.abs(now - nextBeat);
-      let feedback = 'Miss';
-
-      if (diff < 200) feedback = 'Great!';
-      else if (diff < 400) feedback = 'Hit!';
-
-      count++;
-      lastSquatTime = now;
-      countDisplay.textContent = `回数: ${count}`;
-      resultDisplay.textContent = feedback;
-      updateBall();
-    }
-
-    // リズムパルス（BPMにあわせてボール点滅）
-    function rhythmLoop() {
+    function handleJump(z) {
       if (!running) return;
-      const now = Date.now();
-      if (now >= nextBeat) {
-        ball.style.backgroundColor = '#ffa07a';
-        setTimeout(() => {
-          ball.style.backgroundColor = '#ff6347';
-        }, 150);
-        nextBeat += beatInterval;
+
+      if (!jumping && Math.abs(z) < 2) {
+        // 宙に浮いた！
+        jumping = true;
+        statusDisplay.textContent = "ジャンプ中！🕴️";
       }
-      requestAnimationFrame(rhythmLoop);
+
+      if (jumping && Math.abs(z) > 15) {
+        // 着地！
+        jumpCount++;
+        countDisplay.textContent = `ジャンプ回数: ${jumpCount}`;
+        statusDisplay.textContent = "着地 ✅";
+        jumping = false;
+      }
     }
 
-    // タイマー更新
-    function startTimer(seconds) {
-      remaining = seconds;
-      timerDisplay.textContent = `残り時間: ${remaining} 秒`;
-      timerInterval = setInterval(() => {
-        remaining--;
-        timerDisplay.textContent = `残り時間: ${remaining} 秒`;
-        if (remaining <= 0) stopGame();
-      }, 1000);
-    }
-
-    // ゲーム開始
-    function startGame() {
-      count = 0;
-      updateBall();
-      countDisplay.textContent = `回数: 0`;
-      resultDisplay.textContent = '';
+    startBtn.addEventListener("click", () => {
       running = true;
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-      const bpm = parseInt(bpmSelect.value);
-      const timeLimit = parseInt(timeLimitSelect.value);
-      beatInterval = 60000 / bpm;
-      nextBeat = Date.now() + beatInterval;
-      startTimer(timeLimit);
-      rhythmLoop();
-    }
+      jumpCount = 0;
+      jumping = false;
+      countDisplay.textContent = "ジャンプ回数: 0";
+      statusDisplay.textContent = "検出開始！端末を持ってジャンプしてね";
 
-    // ゲーム停止
-    function stopGame() {
-      running = false;
-      clearInterval(timerInterval);
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
-      timerDisplay.textContent = `終了！おつかれさま`;
-    }
-
-    startBtn.addEventListener('click', startGame);
-    stopBtn.addEventListener('click', stopGame);
-
-    // 加速度イベント
-    window.addEventListener('devicemotion', (e) => {
-      const y = e.accelerationIncludingGravity.y;
-      if (y < -THRESHOLD) {
-        handleSquat();
+      if (typeof DeviceMotionEvent.requestPermission === "function") {
+        // iOS用の許可リクエスト
+        DeviceMotionEvent.requestPermission().then(response => {
+          if (response === "granted") {
+            window.addEventListener("devicemotion", (e) => {
+              const z = e.accelerationIncludingGravity.z;
+              handleJump(z);
+            });
+          } else {
+            statusDisplay.textContent = "センサー利用が拒否されました";
+          }
+        });
+      } else {
+        // AndroidやPC用
+        window.addEventListener("devicemotion", (e) => {
+          const z = e.accelerationIncludingGravity.z;
+          handleJump(z);
+        });
       }
     });
   </script>
