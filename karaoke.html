@@ -2,68 +2,96 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>音階テスト</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>カラオケ音階テスト</title>
   <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
-      padding: 20px;
-    }
-    #noteDisplay {
-      font-size: 72px;
-      margin: 40px 0;
-      color: #ff6347;
-    }
-    button {
-      font-size: 18px;
-      padding: 10px 20px;
-      margin: 5px;
-    }
+    body { font-family: sans-serif; text-align: center; padding: 40px; }
+    #note { font-size: 64px; margin: 20px; }
+    #freq { font-size: 24px; color: gray; }
+    button { padding: 10px 20px; font-size: 18px; }
   </style>
 </head>
 <body>
-  <h1>音階テスト</h1>
-  <div id="noteDisplay">--</div>
-  <button id="startBtn">スタート</button>
-  <button id="stopBtn" disabled>ストップ</button>
+  <h1>カラオケ風 音階検出🎤</h1>
+  <button id="startBtn">マイク開始</button>
+  <div id="note">---</div>
+  <div id="freq">周波数: -- Hz</div>
 
   <script>
-    const notes = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
-    let currentIndex = 0;
-    let intervalId = null;
+    const noteDisplay = document.getElementById("note");
+    const freqDisplay = document.getElementById("freq");
+    const startBtn = document.getElementById("startBtn");
 
-    const noteDisplay = document.getElementById('noteDisplay');
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
+    let audioContext, analyser, dataArray, rafId;
 
-    function speak(note) {
-      const utter = new SpeechSynthesisUtterance(note);
-      utter.lang = 'ja-JP';
-      window.speechSynthesis.speak(utter);
+    // 音階と周波数 (4オクターブの一部)
+    const noteFreqs = [
+      { note: "C",  freq: 261.63 },
+      { note: "D",  freq: 293.66 },
+      { note: "E",  freq: 329.63 },
+      { note: "F",  freq: 349.23 },
+      { note: "G",  freq: 392.00 },
+      { note: "A",  freq: 440.00 },
+      { note: "B",  freq: 493.88 }
+    ];
+
+    // スムージング用履歴
+    let noteHistory = [];
+    const HISTORY_LEN = 5;
+
+    function detectPitch() {
+      analyser.getByteFrequencyData(dataArray);
+
+      let maxIndex = -1;
+      let maxValue = -Infinity;
+      for (let i = 0; i < dataArray.length; i++) {
+        if (dataArray[i] > maxValue) {
+          maxValue = dataArray[i];
+          maxIndex = i;
+        }
+      }
+
+      if (maxIndex > -1) {
+        const nyquist = audioContext.sampleRate / 2;
+        const freq = maxIndex * nyquist / dataArray.length;
+
+        // 一番近い音階を探す
+        let closest = noteFreqs[0];
+        let minDiff = Math.abs(freq - closest.freq);
+        for (let i = 1; i < noteFreqs.length; i++) {
+          const diff = Math.abs(freq - noteFreqs[i].freq);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closest = noteFreqs[i];
+          }
+        }
+
+        // スムージング（履歴に追加）
+        noteHistory.push(closest.note);
+        if (noteHistory.length > HISTORY_LEN) noteHistory.shift();
+
+        // 多数決で安定化
+        const counts = {};
+        noteHistory.forEach(n => counts[n] = (counts[n] || 0) + 1);
+        const stableNote = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+
+        noteDisplay.textContent = stableNote;
+        freqDisplay.textContent = `周波数: ${freq.toFixed(1)} Hz`;
+      }
+
+      rafId = requestAnimationFrame(detectPitch);
     }
 
-    function showNextNote() {
-      const note = notes[currentIndex];
-      noteDisplay.textContent = note;
-      speak(note);
-      currentIndex = (currentIndex + 1) % notes.length;
-    }
-
-    startBtn.addEventListener('click', () => {
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-      currentIndex = 0;
-      showNextNote();
-      intervalId = setInterval(showNextNote, 1000); // 1秒ごとに次の音階
-    });
-
-    stopBtn.addEventListener('click', () => {
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
-      clearInterval(intervalId);
-      noteDisplay.textContent = '--';
-      window.speechSynthesis.cancel();
+    startBtn.addEventListener("click", async () => {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const source = audioContext.createMediaStreamSource(stream);
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 4096;  // 精度を少し上げる
+        dataArray = new Uint8Array(analyser.frequencyBinCount);
+        source.connect(analyser);
+        detectPitch();
+      }
     });
   </script>
 </body>
