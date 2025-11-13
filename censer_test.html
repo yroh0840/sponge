@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+</head>
+<body>
+  <h1>加速度ラボ</h1>
+  <div>
+    <p id="x"></p>
+    <p id="y"></p>
+    <p id="z"></p>
+  </div>
+</body>
+</html>
+
+<script>
+
+  window.addEventListener('devicemotion', (event) => {
+      const x = event.accelerationIncludingGravity.x;
+      const y = event.accelerationIncludingGravity.y;
+      const z = event.accelerationIncludingGravity.z;
+
+      document.getElementById("x").textContent = x;
+      document.getElementById("y").textContent = y;
+      document.getElementById("z").textContent = z;
+
+
+
+      // const angle = Math.atan2(y, z) * (180 / Math.PI);
+      // const verticalAccel = Math.abs(z) > Math.abs(y) ? z : y;
+      // const now = Date.now();
+      // if (angle > THRESHOLD_ANGLE && verticalAccel > THRESHOLD_ACCEL && direction === 'none') {
+      //   direction = 'down';
+      // } else if (angle < THRESHOLD_ANGLE && verticalAccel < -THRESHOLD_ACCEL && direction === 'down') {
+      //   const bpmInterval = getBpmInterval();
+      //   const timeSinceLastBeat = (now - lastBeatTime) % bpmInterval;
+      //   if (timeSinceLastBeat < 100 || timeSinceLastBeat > bpmInterval - 100) {
+      //     handleSquatDetected();
+      //     direction = 'none';
+      //   }
+      // }
+    });
+</script>
